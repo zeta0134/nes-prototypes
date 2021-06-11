@@ -1,7 +1,8 @@
 .PHONY: all clean dir run
 
 SOURCEDIR := prg
-INCLUDEDIR := ../../common
+CHRDIR := chr
+INCLUDEDIR := ../common
 ARTDIR := ../../art
 BUILDDIR := build
 ROM_NAME := $(notdir $(CURDIR)).nes
@@ -31,8 +32,8 @@ $(ROM_NAME): $(SOURCEDIR)/mmc3.cfg $(O_FILES)
 	ld65 -m $(BUILDDIR)/map.txt --dbgfile $(DBG_NAME) -o $@ -C $^
 
 $(BUILDDIR)/%.o: $(SOURCEDIR)/%.s
-	ca65 -g -I $(INCLUDEDIR) -o $@ $<
+	ca65 -g -I $(INCLUDEDIR) --bin-include-dir $(ARTDIR) -o $@ $<
 
 $(BUILDDIR)/%.o: $(CHRDIR)/%.s
-	ca65 -g -o $@ $<
+	ca65 -g --bin-include-dir $(ARTDIR) -o $@ $<
 
