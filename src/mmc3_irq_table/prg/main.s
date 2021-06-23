@@ -125,7 +125,7 @@ start:
         ; re-enable graphics
         lda #$1E
         sta PPUMASK
-        lda #(VBLANK_NMI | OBJ_0000 | BG_1000)
+        lda #(VBLANK_NMI | OBJ_1000 | BG_0000)
         sta PPUCTRL
         
 gameloop:
@@ -133,6 +133,9 @@ gameloop:
 
         ; continue forever
         jmp gameloop
+
+
+
 
 
 .endscope
