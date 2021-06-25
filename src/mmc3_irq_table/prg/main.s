@@ -320,7 +320,7 @@ nmi:
         sta MMC3_IRQ_DISABLE
 
         ; enable interrupts; the first one shall occur after 8 scanlines
-        lda #($60 - 2)
+        lda #(64 - 2)
         sta MMC3_IRQ_LATCH
         sta MMC3_IRQ_RELOAD
         sta MMC3_IRQ_ENABLE
@@ -373,8 +373,8 @@ continue:
         ; prep initial bytes for writing
 split_xy_begin:
         ldy irq_table_index ; 3 (9)
-        lda static_test_irq_table_nametable_high, y ; 4 (12)
-        ldx static_test_irq_table_scroll_y, y  ; 4 (12)
+        lda irq_table_nametable_high, y ; 4 (12)
+        ldx irq_table_scroll_y, y  ; 4 (12)
 
         ; ppu dot range here: 118 - 138
 
@@ -383,8 +383,8 @@ split_xy_begin:
         stx $2005 ; 4 (12)
 
         ; prep for second write
-        lda static_test_irq_table_scroll_x, y ; 4 (12)
-        ldx static_test_irq_table_nametable_low, y ; 4 (12)
+        lda irq_table_scroll_x, y ; 4 (12)
+        ldx irq_table_nametable_low, y ; 4 (12)
 
         ; ppu dot range here: 166 - 186
 
@@ -406,7 +406,7 @@ split_xy_begin:
         inc irq_table_index ; 5 (15)
 
         ; Wait the requisite number of scanlines before the next 
-        lda static_test_irq_table_scanlines, y ; 4 (12)
+        lda irq_table_scanlines, y ; 4 (12)
         cmp #$01 ; 2 (6)
         bne delay_with_mmc3_irq ; when not taken: 2 (6)
 delay_with_cpu:
