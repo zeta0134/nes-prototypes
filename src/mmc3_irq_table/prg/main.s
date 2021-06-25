@@ -156,9 +156,13 @@ temp_x: .word $0000
 temp_y: .byte $00
 temp_offset: .byte $00
 irq_generation_index: .byte $00
+entries_to_generate: .byte $00
+entries_generated: .byte $00
 
         .zeropage
 fx_table_ptr: .word $0000
+fx_table_size: .byte $00
+
 
         .segment "PRGLAST_E000"
 .proc generate_sine_table
@@ -171,10 +175,14 @@ fx_table_ptr: .word $0000
         ; apply initial offset to get us to the starting point of the distortion effect
         ; note: later we'll want to vary the initial offset
         clc
-        adc #64
+        adc #32
         sta temp_y
         
         st16 fx_table_ptr, simple_sine_pattern
+        lda #16
+        sta fx_table_size
+        lda #$0
+        sta entries_generated
         ldy #$0
 
 
@@ -213,9 +221,16 @@ loop:
         sta irq_table_nametable_low, x
 
         iny ; advance to the next offset entry
+        cpy fx_table_size
+        bne no_table_wrap
+        ldy #$0
+no_table_wrap:
         ; here we need to set the scanline count for the last entry differently, so this
         ; check comes before we write that out
-        cpy #16 ; have we finisehd the whole table?
+
+        inc entries_generated
+        lda entries_to_generate
+        cmp entries_generated ; have we finisehd the whole table?
         beq cleanup
 
         ; finally the scanline count, which for an x-distortion is also our
@@ -249,6 +264,8 @@ start:
         jsr init_nametable
 
         jsr clear_irq_table
+        lda #44
+        sta entries_to_generate
         jsr generate_sine_table
 
         ; re-enable graphics
@@ -320,7 +337,7 @@ nmi:
         sta MMC3_IRQ_DISABLE
 
         ; enable interrupts; the first one shall occur after 8 scanlines
-        lda #(64 - 2)
+        lda #(32 - 2)
         sta MMC3_IRQ_LATCH
         sta MMC3_IRQ_RELOAD
         sta MMC3_IRQ_ENABLE
