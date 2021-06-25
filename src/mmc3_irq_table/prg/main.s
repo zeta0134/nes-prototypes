@@ -13,6 +13,10 @@ ptr: .word $0000
 irq_table_index: .byte $00
 two_thirds_temp: .byte $00
 
+camera_nametable: .byte $00
+camera_x: .byte $00
+camera_y: .byte $00
+
         .segment "RAM"
 
 ; note: for timing purpuses, ensure no table crosses a page boundary! align / relocate individual tables
@@ -20,6 +24,7 @@ two_thirds_temp: .byte $00
 ; on one page. (If they are sized as a power of 2, simply aligning the entire section to a page start
 ; should be sufficient.)
 IRQ_TABLE_SIZE = 64
+.align IRQ_TABLE_SIZE
 irq_table_scanlines: .res IRQ_TABLE_SIZE
 irq_table_nametable_high: .res IRQ_TABLE_SIZE
 irq_table_scroll_y: .res IRQ_TABLE_SIZE
@@ -84,7 +89,7 @@ nametable_low_y_table:
 static_test_irq_table_scanlines: 
         .byte $01, $01, $01, $01, $01, $01, $01, $01, $01, $FF
 static_test_irq_table_nametable_high: 
-        .byte $04, $04, $04, $04, $04, $04, $04, $04, $04, $04 ; nametable (x high) does not change
+        .byte $04, $04, $04, $04, $04, $04, $04, $04, $04, $04 ; nametable (x high)
 static_test_irq_table_scroll_y: 
         .byte $60, $64, $68, $6C, $70, $74, $78, $7C, $80, $84 ; y increases match scanline counts
 static_test_irq_table_scroll_x: 
@@ -100,6 +105,30 @@ static_test_irq_table_nametable_low:
         nametable_low $F0, $7C
         nametable_low $EE, $80
         nametable_low $EC, $84
+
+.macro sbyte value
+        .byte (value & $FF)
+.endmacro
+
+; note: these distortion patterns all precompute the change between
+; the previous scanline and the current one.
+simple_sine_pattern:
+        sbyte 5
+        sbyte 3
+        sbyte 3
+        sbyte 1
+        sbyte -1
+        sbyte -3
+        sbyte -3
+        sbyte -5
+        sbyte -5
+        sbyte -3
+        sbyte -3
+        sbyte -1
+        sbyte 1
+        sbyte 3
+        sbyte 3
+        sbyte 5
 
 ; we don't really "clear" this so much as configure every entry
 ; to take more scanlines than there are in a single frame
@@ -121,6 +150,95 @@ loop:
         rts
 .endproc
 
+; lots of this is hard-coded right now, deal
+        .segment "RAM"
+temp_x: .word $0000
+temp_y: .byte $00
+temp_offset: .byte $00
+irq_generation_index: .byte $00
+
+        .zeropage
+fx_table_ptr: .word $0000
+
+        .segment "PRGLAST_E000"
+.proc generate_sine_table
+        ; initialize scroll registers
+        lda camera_nametable
+        sta temp_x+1
+        lda camera_x
+        sta temp_x
+        lda camera_y
+        ; apply initial offset to get us to the starting point of the distortion effect
+        ; note: later we'll want to vary the initial offset
+        clc
+        adc #64
+        sta temp_y
+        
+        st16 fx_table_ptr, simple_sine_pattern
+        ldy #$0
+
+
+        ; for each entry in the table (16 entries):
+        ; - compute the new scroll coordinates and nametable bit
+        ; - use these values to generate one entry in the IRQ table
+        ; note: later we'll want to be able to specify the number of entries to generate,
+        ; and wrap the table around its end with a mask
+
+loop:
+        ; calculate the new x offset
+        lda (fx_table_ptr), y
+        sta temp_offset
+        sadd16 temp_x, temp_offset
+
+
+        ; generate a new entry in the table
+        ldx irq_generation_index
+
+        lda temp_x+1
+        ; mask the low bit of the nametable, and shift it into position
+        and #$01
+        asl
+        asl
+        sta irq_table_nametable_high, x
+        lda temp_x
+        sta irq_table_scroll_x, x
+        lda temp_y
+        sta irq_table_scroll_y, x
+        ; the low nametable byte utilizes our LUT
+        ldx temp_x
+        lda nametable_low_x_table, x
+        ldx temp_y
+        ora nametable_low_y_table, x
+        ldx irq_generation_index
+        sta irq_table_nametable_low, x
+
+        iny ; advance to the next offset entry
+        ; here we need to set the scanline count for the last entry differently, so this
+        ; check comes before we write that out
+        cpy #16 ; have we finisehd the whole table?
+        beq cleanup
+
+        ; finally the scanline count, which for an x-distortion is also our
+        ; y offset for the *next* row
+        lda #4
+        sta irq_table_scanlines, x
+        clc
+        adc temp_y
+        sta temp_y
+
+        ; this entry is complete, advance to the next entry
+        inc irq_generation_index
+        jmp loop
+cleanup:
+        ; set the scanline count for the last entry to $FF, obscenely long, effectively
+        ; disabling it
+        lda #$FF
+        sta irq_table_scanlines, x
+        ; ... and we're done?
+
+        rts
+.endproc
+
 start:
         lda #$00
         sta PPUMASK ; disable rendering
@@ -131,6 +249,7 @@ start:
         jsr init_nametable
 
         jsr clear_irq_table
+        jsr generate_sine_table
 
         ; re-enable graphics
         lda #$1E
@@ -280,6 +399,8 @@ split_xy_begin:
         ; now perform the last two writes:
         sta $2005 ; 4 (12)
         stx $2006 ; 4 (12)
+
+        ; ppu dot range here: 280 - 300
 
         ; end timing sensitive code; prep for next scanline
         inc irq_table_index ; 5 (15)
