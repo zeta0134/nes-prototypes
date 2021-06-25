@@ -24,7 +24,7 @@ loop:
 .endscope
 .endmacro
 
-        .import start
+        .import start, nmi, irq
 reset:
         sei            ; Disable interrupts
         cld            ; make sure decimal mode is off (not that it does anything)
@@ -43,26 +43,6 @@ reset:
         jmp start
 
         .importzp GameloopCounter, LastNmi
-nmi:
-        ; preserve registers
-        pha
-        txa
-        pha
-        tya
-        pha
-
-        ; For now, do NOTHING!
-
-        ; restore registers
-        pla
-        tay
-        pla
-        tax
-        pla
-        ; all done
-        rti
-
-irq:
         ;
         ; Labels nmi/reset/irq are part of prg3_e000.s
         ;
