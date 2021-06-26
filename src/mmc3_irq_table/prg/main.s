@@ -110,6 +110,7 @@ static_test_irq_table_nametable_low:
         .byte (value & $FF)
 .endmacro
 
+SIMPLE_SINE_LENGTH = 16
 ; note: these distortion patterns all precompute the change between
 ; the previous scanline and the current one.
 simple_sine_pattern:
@@ -129,6 +130,71 @@ simple_sine_pattern:
         sbyte 3
         sbyte 3
         sbyte 5
+
+simple_sine_scanlines:
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+        .byte 4
+
+
+VERY_CURVED_SINE_LENGTH = 20
+
+very_curved_sine_pattern:
+        sbyte 0
+        sbyte 4
+        sbyte 5
+        sbyte 6
+        sbyte 7
+        sbyte 8
+        sbyte 7
+        sbyte 6
+        sbyte 5
+        sbyte 4
+        sbyte 0
+        sbyte -4
+        sbyte -5
+        sbyte -6
+        sbyte -7
+        sbyte -8
+        sbyte -7
+        sbyte -6
+        sbyte -5
+        sbyte -4
+
+very_curved_sine_scanlines:
+        .byte 1
+        .byte 1
+        .byte 2
+        .byte 2
+        .byte 4
+        .byte 13
+        .byte 4
+        .byte 2
+        .byte 2
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 2
+        .byte 2
+        .byte 4
+        .byte 13
+        .byte 4
+        .byte 2
+        .byte 2
+        .byte 1
 
 ; we don't really "clear" this so much as configure every entry
 ; to take more scanlines than there are in a single frame
@@ -156,35 +222,20 @@ temp_x: .word $0000
 temp_y: .byte $00
 temp_offset: .byte $00
 irq_generation_index: .byte $00
-entries_to_generate: .byte $00
-entries_generated: .byte $00
+pixels_to_generate: .byte $00
+pixels_generated: .byte $00
 
         .zeropage
-fx_table_ptr: .word $0000
+fx_pattern_table_ptr: .word $0000
+fx_scanline_table_ptr: .word $0000
 fx_table_size: .byte $00
 
 
         .segment "PRGLAST_E000"
-.proc generate_sine_table
-        ; initialize scroll registers
-        lda camera_nametable
-        sta temp_x+1
-        lda camera_x
-        sta temp_x
-        lda camera_y
-        ; apply initial offset to get us to the starting point of the distortion effect
-        ; note: later we'll want to vary the initial offset
-        clc
-        adc #32
-        sta temp_y
-        
-        st16 fx_table_ptr, simple_sine_pattern
-        lda #16
-        sta fx_table_size
+.proc generate_x_distortion
         lda #$0
-        sta entries_generated
+        sta pixels_generated
         ldy #$0
-
 
         ; for each entry in the table (16 entries):
         ; - compute the new scroll coordinates and nametable bit
@@ -193,25 +244,33 @@ fx_table_size: .byte $00
         ; and wrap the table around its end with a mask
 
 loop:
+        ; reset the temp X coordinate
+        lda camera_nametable
+        sta temp_x+1
+        lda camera_x
+        sta temp_x
+
         ; calculate the new x offset
-        lda (fx_table_ptr), y
+        lda (fx_pattern_table_ptr), y
         sta temp_offset
         sadd16 temp_x, temp_offset
-
 
         ; generate a new entry in the table
         ldx irq_generation_index
 
-        lda temp_x+1
         ; mask the low bit of the nametable, and shift it into position
+        lda temp_x+1
         and #$01
         asl
         asl
         sta irq_table_nametable_high, x
+
+        ; the two scroll coordinates can be used directly
         lda temp_x
         sta irq_table_scroll_x, x
         lda temp_y
         sta irq_table_scroll_y, x
+
         ; the low nametable byte utilizes our LUT
         ldx temp_x
         lda nametable_low_x_table, x
@@ -220,38 +279,80 @@ loop:
         ldx irq_generation_index
         sta irq_table_nametable_low, x
 
-        iny ; advance to the next offset entry
-        cpy fx_table_size
-        bne no_table_wrap
-        ldy #$0
-no_table_wrap:
-        ; here we need to set the scanline count for the last entry differently, so this
-        ; check comes before we write that out
-
-        inc entries_generated
-        lda entries_to_generate
-        cmp entries_generated ; have we finisehd the whole table?
-        beq cleanup
-
-        ; finally the scanline count, which for an x-distortion is also our
-        ; y offset for the *next* row
-        lda #4
+        ; finally the scanline count
+        lda (fx_scanline_table_ptr), y
         sta irq_table_scanlines, x
+        
+        ; add this to temp_y for the next section
         clc
         adc temp_y
         sta temp_y
+        
+        ; accumulate this against our running total
+        lda irq_table_scanlines, x
+        clc
+        adc pixels_generated
+        sta pixels_generated
+        ; are we through generating pixels? If so, cleanup is in order
+        cmp pixels_to_generate
+        bcs cleanup
+
+        ; advance to the next irq table entry:
+        inc irq_generation_index
+
+        ; advance to the next offset entry; if we reach the end of the table,
+        ; wrap around to the beginning
+        iny 
+        cpy fx_table_size
+        bne no_table_wrap
+        ldy #$0
+        no_table_wrap:
 
         ; this entry is complete, advance to the next entry
-        inc irq_generation_index
         jmp loop
 cleanup:
+        ; a holds our total generated pixels; we need to fix the scanline count for the last
+        ; entry so that it doesn't overrun the requested size
+        sec
+        sbc pixels_to_generate
+        ; now a holds the "extra" pixels that the current scanline encodes for
+        sta temp_offset
+        lda irq_table_scanlines, x ; still points to the last scanline entry
+        sec
+        sbc temp_offset
+        sta irq_table_scanlines, x ; should now contain the correct final value
+
+        ; ... and we're done?
+        rts
+
+
+        ; here we need to set the scanline count for the last entry differently, so this
+        ; check comes before we write that out
+
+        ;inc entries_generated
+        ;lda entries_to_generate
+        ;cmp entries_generated ; have we finisehd the whole table?
+        ;beq cleanup
+
+        ; finally the scanline count, which for an x-distortion is also our
+        ; y offset for the *next* row
+        ;lda #4
+        ;sta irq_table_scanlines, x
+        ;clc
+        ;adc temp_y
+        ;sta temp_y
+
+        ; this entry is complete, advance to the next entry
+        ;inc irq_generation_index
+        ;jmp loop
+;cleanup:
         ; set the scanline count for the last entry to $FF, obscenely long, effectively
         ; disabling it
-        lda #$FF
-        sta irq_table_scanlines, x
+        ;lda #$FF
+        ;sta irq_table_scanlines, x
         ; ... and we're done?
 
-        rts
+        ;rts
 .endproc
 
 start:
@@ -264,9 +365,27 @@ start:
         jsr init_nametable
 
         jsr clear_irq_table
-        lda #44
-        sta entries_to_generate
-        jsr generate_sine_table
+        lda #176
+        sta pixels_to_generate
+
+        ; initialize scroll registers
+        lda camera_nametable
+        sta temp_x+1
+        lda camera_x
+        sta temp_x
+        lda camera_y
+        ; apply initial offset to get us to the starting point of the distortion effect
+        ; note: later we'll want to vary the initial offset
+        clc
+        adc #32
+        sta temp_y
+
+        st16 fx_pattern_table_ptr, very_curved_sine_pattern
+        st16 fx_scanline_table_ptr, very_curved_sine_scanlines
+        lda #(VERY_CURVED_SINE_LENGTH)
+        sta fx_table_size
+
+        jsr generate_x_distortion
 
         ; re-enable graphics
         lda #$1E
@@ -337,7 +456,7 @@ nmi:
         sta MMC3_IRQ_DISABLE
 
         ; enable interrupts; the first one shall occur after 8 scanlines
-        lda #(32 - 2)
+        lda #(32 - 1)
         sta MMC3_IRQ_LATCH
         sta MMC3_IRQ_RELOAD
         sta MMC3_IRQ_ENABLE
