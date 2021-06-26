@@ -35,6 +35,7 @@ irq_table_nametable_high: .res IRQ_TABLE_SIZE
 irq_table_scroll_y: .res IRQ_TABLE_SIZE
 irq_table_scroll_x: .res IRQ_TABLE_SIZE
 irq_table_nametable_low: .res IRQ_TABLE_SIZE
+irq_table_ppumask: .res IRQ_TABLE_SIZE
 
         .segment "PRGLAST_E000"
         .export start, nmi, irq
@@ -286,6 +287,8 @@ loop:
         sta irq_table_scroll_y, x
         sta irq_table_nametable_high, x
         sta irq_table_nametable_low, x
+        lda #$1F
+        sta irq_table_ppumask, x
         dex
         bne loop
         rts
@@ -373,6 +376,10 @@ loop:
         ldx irq_generation_index
         sta irq_table_nametable_low, x
 
+        ; ppumask: for debugging, make it blue!
+        lda #($1E | TINT_B)
+        sta irq_table_ppumask, x
+
         ; finally the scanline count
         lda (fx_scanline_table_ptr), y
         ; if there is an initial pixel offset, subtract it here
@@ -458,6 +465,10 @@ cleanup:
         ora nametable_low_x_table, x
         ldx irq_generation_index
         sta irq_table_nametable_low, x
+
+        ; ppumask: for debugging, make it normal
+        lda #$1E
+        sta irq_table_ppumask, x
 
         ; the final entry specifies $FF scanlines, which lasts until NMI
         lda #$ff
@@ -621,6 +632,10 @@ no_wrap:
         ; explicitly set bank locations and nametable (to 0)
         lda #(VBLANK_NMI | OBJ_1000 | BG_0000)
         sta PPUCTRL
+
+        ; reset PPUMASK to something sane
+        lda #$1E
+        sta PPUMASK
 
         ; static scroll registers, for now
         lda #$00
