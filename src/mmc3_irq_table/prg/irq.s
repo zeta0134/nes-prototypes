@@ -120,25 +120,37 @@ split_xy_begin:
         sta $2006 ; 4 (12)
         stx $2005 ; 4 (12)
 
+        ; put PPUMASK byte on the stack
+
+        lda irq_table_ppumask, y ; 4 (12)
+        pha ; 3 (9)
+
         ; prep for second write
         lda irq_table_scroll_x, y ; 4 (12)
         ldx irq_table_nametable_low, y ; 4 (12)
 
-        ; ppu dot range here: 166 - 186
+        ; ppu dot range here: 187 - 207
 
-
-        ; spinwait for alignment! need to burn at least 170 dots, and at most 198 dots
-        ; this works out to 56.6 - 66.0 CPU cycles. Let's shoot for half, so we'll burn
-        ; 60 CPU cycles, with 30 nops
-        .repeat 15
+        ; from here need to burn 23 cycles to be in range for the write
+        ; first 7 cycles with a stack poke
+        php ; 3 (12)
+        plp ; 4 (9)
+        ; now the remaining 16 with a nop chain
+        .repeat 8
         nop
-        .endrep ; 30 (90)
+        .endrep ; 16 (48)
+
+        ; ppu dot range here: 256 - 276
 
         ; now perform the last two writes:
         sta $2005 ; 4 (12)
         stx $2006 ; 4 (12)
 
         ; ppu dot range here: 280 - 300
+
+
+        pla ; 4 (12)
+        sta PPUMASK ; 4 (12)
 
         ; end timing sensitive code; prep for next scanline
         inc irq_table_index ; 5 (15)
@@ -149,15 +161,15 @@ split_xy_begin:
         bne delay_with_mmc3_irq ; when not taken: 2 (6)
 delay_with_cpu:
         ; we've already missed the rising A12 edge, so here we need to use the CPU to delay
-        ; at this stage we are within dots: 319 - 339
+        ; at this stage we are within dots: 2 - 22
 
         ; accounting for the jmp, we need to burn exactly 35.6667 dots. We can deal with 12.6667 of those here:
         burn_12_and_two_thirds_cycles ; 12.667 (~38)
 
         ; now we need to burn 20 cycles
-        .repeat 10
+        .repeat 6
         nop 
-        .endrep ; 20 (60)
+        .endrep ; 12 (36)
 
         ; ... and the jmp consumes the last 3
         jmp split_xy_begin ; 3 (9) 
