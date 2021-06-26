@@ -10,12 +10,17 @@
         .zeropage
 
 ptr: .word $0000
+active_irq_index: .byte $00
+inactive_irq_index: .byte $00
 irq_table_index: .byte $00
 two_thirds_temp: .byte $00
 
 camera_nametable: .byte $00
 camera_x: .byte $00
 camera_y: .byte $00
+nmi_counter: .byte $00
+
+fx_offset: .byte $00
 
         .segment "RAM"
 
@@ -23,7 +28,7 @@ camera_y: .byte $00
 ; as required. It is NOT important for these tables to be adjacent in memory, but they MUST each reside
 ; on one page. (If they are sized as a power of 2, simply aligning the entire section to a page start
 ; should be sufficient.)
-IRQ_TABLE_SIZE = 64
+IRQ_TABLE_SIZE = 128
 .align IRQ_TABLE_SIZE
 irq_table_scanlines: .res IRQ_TABLE_SIZE
 irq_table_nametable_high: .res IRQ_TABLE_SIZE
@@ -236,7 +241,6 @@ fx_table_size: .byte $00
 .proc generate_x_distortion
         lda #$0
         sta pixels_generated
-        sta irq_generation_index
         ldy #$0
 
         ; to apply the pixel offset, skip over any initial entries that are
@@ -397,7 +401,16 @@ cleanup:
         rts
 .endproc
 
-start:
+.proc wait_for_nmi
+        lda nmi_counter
+loop:
+        cmp nmi_counter
+        beq loop
+        rts
+.endproc
+
+; note: never exits by design
+.proc start
         lda #$00
         sta PPUMASK ; disable rendering
         sta PPUCTRL ; and NMI
@@ -407,31 +420,18 @@ start:
         jsr init_nametable
 
         jsr clear_irq_table
-        lda #176
-        sta pixels_to_generate
-
-        ; initialize scroll registers
-        lda camera_nametable
-        sta temp_x+1
-        lda camera_x
-        sta temp_x
-        lda camera_y
-        ; apply initial offset to get us to the starting point of the distortion effect
-        ; note: later we'll want to vary the initial offset
-        clc
-        adc #32
-        sta temp_y
-
-        st16 fx_pattern_table_ptr, very_curved_sine_pattern
-        st16 fx_scanline_table_ptr, very_curved_sine_scanlines
-        lda #(VERY_CURVED_SINE_LENGTH)
-        sta fx_table_size
-
-        lda #12
-        sta initial_pixel_offset
-
-        jsr generate_x_distortion
-        jsr generate_final_entry
+        
+        ; initialize some raster effect data, including the table to begin with
+        lda #64
+        sta active_irq_index
+        lda #0
+        sta inactive_irq_index
+        sta fx_offset
+        
+        ; generate that beginning table
+        jsr update_fx_table
+        ; use the generated table
+        jsr swap_irq_buffers
 
         ; re-enable graphics
         lda #$1E
@@ -453,21 +453,69 @@ start:
         ldx #$00
         
 gameloop:
-        ; process gameloop
-        dec $200,x ; 7 cycle instruction, worst case
-        nop ; 2 cycle instruction, best case
-        ; continue forever
+        inc fx_offset
+        cmp #20
+        bne no_wrap
+        lda #0
+        sta fx_offset
+no_wrap:
+        jsr update_fx_table
+        jsr swap_irq_buffers
+        jsr wait_for_nmi
         jmp gameloop
+.endproc
 
+.proc swap_irq_buffers
+        lda inactive_irq_index
+        ldx active_irq_index
+        stx inactive_irq_index
+        sta active_irq_index
+        rts
+.endproc
 
+.proc update_fx_table
+        ; start at the beginning of the inactive buffer
+        ; (do NOT touch the active buffer)
+        lda inactive_irq_index
+        sta irq_generation_index
 
-nmi:
+        lda #176
+        sta pixels_to_generate
+
+        ; initialize scroll registers
+        lda camera_nametable
+        sta temp_x+1
+        lda camera_x
+        sta temp_x
+        lda camera_y
+        ; apply initial offset to get us to the starting point of the distortion effect
+        ; note: later we'll want to vary the initial offset
+        clc
+        adc #32
+        sta temp_y
+
+        st16 fx_pattern_table_ptr, very_curved_sine_pattern
+        st16 fx_scanline_table_ptr, very_curved_sine_scanlines
+        lda #(VERY_CURVED_SINE_LENGTH)
+        sta fx_table_size
+
+        lda fx_offset
+        sta initial_pixel_offset
+
+        jsr generate_x_distortion
+        jsr generate_final_entry
+        rts
+.endproc
+
+.proc nmi
         ; preserve registers
         pha
         txa
         pha
         tya
         pha
+
+        inc nmi_counter
 
         jsr setup_irq_for_frame
 
@@ -480,7 +528,7 @@ nmi:
 
         ; all done
         rti
-
+.endproc
 
 .proc setup_irq_for_frame
         ; reset PPU latch
@@ -496,6 +544,7 @@ nmi:
         sta PPUSCROLL ; y
 
         ; reset the irq table
+        lda active_irq_index
         sta irq_table_index
 
         ; just in case, acknowledge any pending interrupts
