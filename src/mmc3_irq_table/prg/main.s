@@ -22,14 +22,14 @@ nmi_counter: .byte $00
 
 fx_offset: .byte $00
 
-        .segment "RAM"
+        .segment "PRGRAM"
 
 ; note: for timing purpuses, ensure no table crosses a page boundary! align / relocate individual tables
 ; as required. It is NOT important for these tables to be adjacent in memory, but they MUST each reside
 ; on one page. (If they are sized as a power of 2, simply aligning the entire section to a page start
 ; should be sufficient.)
-IRQ_TABLE_SIZE = 128
-.align IRQ_TABLE_SIZE
+IRQ_TABLE_SIZE = 256
+.align 256
 irq_table_scanlines: .res IRQ_TABLE_SIZE
 irq_table_nametable_high: .res IRQ_TABLE_SIZE
 irq_table_scroll_y: .res IRQ_TABLE_SIZE
@@ -238,45 +238,45 @@ interleaved_sine_pattern:
         sbyte 6
 
 interleaved_sine_scanlines:
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
-        .byte 1
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
+        .byte 2
 
 ; we don't really "clear" this so much as configure every entry
 ; to take more scanlines than there are in a single frame
 ; (note that irqs should be disabled during NMI if we go with this
 ; technique in a real project)
 .proc clear_irq_table
-        ldx #(IRQ_TABLE_SIZE)
+        ldx #(IRQ_TABLE_SIZE & $FF)
 loop:
         lda #$FF
         sta irq_table_scanlines, x
@@ -497,7 +497,7 @@ loop:
         jsr clear_irq_table
         
         ; initialize some raster effect data, including the table to begin with
-        lda #64
+        lda #128
         sta active_irq_index
         lda #0
         sta inactive_irq_index
@@ -536,9 +536,9 @@ gameloop:
         lda #0
         sta fx_offset
 no_wrap:
-        debug_color TINT_R
+        ;debug_color TINT_R
         jsr update_fx_table
-        debug_color 0 ; disable debug colors
+        ;debug_color 0 ; disable debug colors
         jsr swap_irq_buffers
         jsr wait_for_nmi
         jmp gameloop
@@ -573,9 +573,14 @@ no_wrap:
         adc #32
         sta temp_y
 
-        st16 fx_pattern_table_ptr, very_curved_sine_pattern
-        st16 fx_scanline_table_ptr, very_curved_sine_scanlines
-        lda #(VERY_CURVED_SINE_LENGTH)
+        ;st16 fx_pattern_table_ptr, very_curved_sine_pattern
+        ;st16 fx_scanline_table_ptr, very_curved_sine_scanlines
+        ;lda #(VERY_CURVED_SINE_LENGTH)
+
+        st16 fx_pattern_table_ptr, interleaved_sine_pattern
+        st16 fx_scanline_table_ptr, interleaved_sine_scanlines
+        lda #(INTERLEAVED_SINE_LENGTH)
+
         sta fx_table_size
 
         lda fx_offset
