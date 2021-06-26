@@ -201,6 +201,76 @@ very_curved_sine_scanlines:
         .byte 2
         .byte 1
 
+INTERLEAVED_SINE_LENGTH = 32
+
+interleaved_sine_pattern:
+        sbyte 0
+        sbyte -0
+        sbyte 6
+        sbyte -6
+        sbyte 11
+        sbyte -11
+        sbyte 15
+        sbyte -15
+        sbyte 16
+        sbyte -16
+        sbyte 15
+        sbyte -15
+        sbyte 11
+        sbyte -11
+        sbyte 6
+        sbyte -6
+        sbyte 0
+        sbyte 0
+        sbyte -6
+        sbyte 6
+        sbyte -11
+        sbyte 11
+        sbyte -15
+        sbyte 15
+        sbyte -16
+        sbyte 16
+        sbyte -15
+        sbyte 15
+        sbyte -11
+        sbyte 11
+        sbyte -6
+        sbyte 6
+
+interleaved_sine_scanlines:
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+        .byte 1
+
 ; we don't really "clear" this so much as configure every entry
 ; to take more scanlines than there are in a single frame
 ; (note that irqs should be disabled during NMI if we go with this
@@ -409,6 +479,11 @@ loop:
         rts
 .endproc
 
+.macro debug_color flags
+        lda #(BG_ON | OBJ_ON | BG_CLIP | OBJ_CLIP | flags)
+        sta PPUMASK
+.endmacro
+
 ; note: never exits by design
 .proc start
         lda #$00
@@ -451,15 +526,19 @@ loop:
 
         ; setup for our stress test
         ldx #$00
+        jsr wait_for_nmi
         
 gameloop:
         inc fx_offset
-        cmp #20
+        lda fx_offset
+        cmp #64
         bne no_wrap
         lda #0
         sta fx_offset
 no_wrap:
+        debug_color TINT_R
         jsr update_fx_table
+        debug_color 0 ; disable debug colors
         jsr swap_irq_buffers
         jsr wait_for_nmi
         jmp gameloop
