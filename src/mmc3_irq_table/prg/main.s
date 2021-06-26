@@ -224,6 +224,7 @@ temp_offset: .byte $00
 irq_generation_index: .byte $00
 pixels_to_generate: .byte $00
 pixels_generated: .byte $00
+initial_pixel_offset: .byte $00
 
         .zeropage
 fx_pattern_table_ptr: .word $0000
@@ -235,7 +236,26 @@ fx_table_size: .byte $00
 .proc generate_x_distortion
         lda #$0
         sta pixels_generated
+        sta irq_generation_index
         ldy #$0
+
+        ; to apply the pixel offset, skip over any initial entries that are
+        ; smaller than the offset
+        lda initial_pixel_offset
+pixel_offset_loop:
+        sec
+        sbc (fx_scanline_table_ptr), y
+        bcc done_skipping_entries
+        sta initial_pixel_offset
+        iny
+        cpy fx_table_size
+        bne no_wraparound
+        ldy #$0
+no_wraparound:
+        jmp pixel_offset_loop
+done_skipping_entries:
+        ; initial_pixel_offset has been reduced to the remainder, the number of pixels
+        ; we should skip in the *current* entry, which y points to
 
         ; for each entry in the table (16 entries):
         ; - compute the new scroll coordinates and nametable bit
@@ -281,12 +301,20 @@ loop:
 
         ; finally the scanline count
         lda (fx_scanline_table_ptr), y
+        ; if there is an initial pixel offset, subtract it here
+        sec
+        sbc initial_pixel_offset
         sta irq_table_scanlines, x
         
         ; add this to temp_y for the next section
         clc
         adc temp_y
         sta temp_y
+
+        ; now clear the pixel offset (if any) so that it does not apply
+        ; to any entries beyond the first
+        lda #0
+        sta initial_pixel_offset
         
         ; accumulate this against our running total
         lda irq_table_scanlines, x
@@ -322,37 +350,51 @@ cleanup:
         sbc temp_offset
         sta irq_table_scanlines, x ; should now contain the correct final value
 
+        ; incremenet the generation index here, so that any future generators called after this one start
+        ; in the right place and don't clobber our last entry
+        inc irq_generation_index
+
         ; ... and we're done?
         rts
+.endproc
 
+; a simple trainer tagged onto the end of the generated table, to display the bottom of the static
+; nametable, below the effect area
+.proc generate_final_entry
+        ldx irq_generation_index
+        
 
-        ; here we need to set the scanline count for the last entry differently, so this
-        ; check comes before we write that out
+        lda camera_nametable
+        and #$01
+        asl
+        asl
+        sta irq_table_nametable_high, x
 
-        ;inc entries_generated
-        ;lda entries_to_generate
-        ;cmp entries_generated ; have we finisehd the whole table?
-        ;beq cleanup
+        lda camera_x
+        sta irq_table_scroll_x, x
+        lda camera_y
+        clc
+        adc #(32 + 176)
+        sta irq_table_scroll_y, x
 
-        ; finally the scanline count, which for an x-distortion is also our
-        ; y offset for the *next* row
-        ;lda #4
-        ;sta irq_table_scanlines, x
-        ;clc
-        ;adc temp_y
-        ;sta temp_y
+        ; reordered a bit, to reuse scroll_y which is already in a
+        tax
+        lda nametable_low_y_table, x
+        ldx camera_x
+        ora nametable_low_x_table, x
+        ldx irq_generation_index
+        sta irq_table_nametable_low, x
 
-        ; this entry is complete, advance to the next entry
-        ;inc irq_generation_index
-        ;jmp loop
-;cleanup:
-        ; set the scanline count for the last entry to $FF, obscenely long, effectively
-        ; disabling it
-        ;lda #$FF
-        ;sta irq_table_scanlines, x
-        ; ... and we're done?
+        ; the final entry specifies $FF scanlines, which lasts until NMI
+        lda #$ff
+        sta irq_table_scanlines, x
 
-        ;rts
+        ; for consistency, increment this anyway; after any generator, we want it to
+        ; *always* point to the next valid entry. (It can also be interpreted as the
+        ; "size" of the table for debugging purposes)
+        inc irq_generation_index
+
+        rts
 .endproc
 
 start:
@@ -385,7 +427,11 @@ start:
         lda #(VERY_CURVED_SINE_LENGTH)
         sta fx_table_size
 
+        lda #12
+        sta initial_pixel_offset
+
         jsr generate_x_distortion
+        jsr generate_final_entry
 
         ; re-enable graphics
         lda #$1E
