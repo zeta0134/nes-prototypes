@@ -182,7 +182,9 @@ delay_with_mmc3_irq:
         sta MMC3_IRQ_RELOAD
         sta MMC3_IRQ_ENABLE
 
-        ; et voila?
+        ; since we possibly clobbered the MMC3 bank select register, restore the shadow copy here
+        lda mmc3_bank_select_shadow
+        sta MMC3_BANK_SELECT
 
         ; restore registers
         pla
@@ -190,6 +192,7 @@ delay_with_mmc3_irq:
         pla
         tax
         pla
+        
         ; all done
         rti
 .endproc
