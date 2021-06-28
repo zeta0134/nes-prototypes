@@ -125,6 +125,10 @@ loop:
         lda #($1E | TINT_B)
         sta irq_table_ppumask, x
 
+        ; chr bank: for debugging, invert it!
+        lda #$01
+        sta irq_table_chr0_bank, x
+
         ; finally the scanline count
         lda (fx_scanline_table_ptr), y
         ; if there is an initial pixel offset, subtract it here
@@ -213,6 +217,10 @@ cleanup:
         ; ppumask: for debugging, make it normal
         lda #$1E
         sta irq_table_ppumask, x
+
+        ; same for chr0 bank
+        lda #$00
+        sta irq_table_chr0_bank, x
 
         ; the final entry specifies $FF scanlines, which lasts until NMI
         lda #$ff

@@ -72,6 +72,7 @@ loop:
         sta irq_table_scroll_y, x
         sta irq_table_nametable_high, x
         sta irq_table_nametable_low, x
+        sta irq_table_chr0_bank, x
         lda #$1F
         sta irq_table_ppumask, x
         dex

@@ -28,7 +28,7 @@ irq_table_nametable_low: .res IRQ_TABLE_SIZE
 irq_table_ppumask: .res IRQ_TABLE_SIZE
 irq_table_chr0_bank: .res IRQ_TABLE_SIZE
 
-.export irq_table_scanlines, irq_table_nametable_high, irq_table_scroll_y, irq_table_scroll_x, irq_table_nametable_low, irq_table_ppumask
+.export irq_table_scanlines, irq_table_nametable_high, irq_table_scroll_y, irq_table_scroll_x, irq_table_nametable_low, irq_table_ppumask, irq_table_chr0_bank
 
         .segment "PRGLAST_E000"
 
