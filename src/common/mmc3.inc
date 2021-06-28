@@ -1,6 +1,3 @@
-.ifndef MMC3_INC
-.define MMC3_INC 1
-
 MMC3_BANK_SELECT = $8000
 MMC3_BANK_DATA   = $8001
 MMC3_MIRRORING   = $A000
@@ -13,6 +10,10 @@ MMC3_IRQ_ENABLE  = $E001
 ; project global
 MMC3_BANKING_MODE = %00000000
 
+.ifndef _MMC3_INC
+_MMC3_INC := 1
+
 .import initialize_mmc3
+.importzp mmc3_bank_select_shadow
 
 .endif
