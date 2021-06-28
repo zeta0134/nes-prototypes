@@ -99,13 +99,19 @@ continue:
         ; acknowledge IRQ (no effect on counter)
         sta MMC3_IRQ_DISABLE ; 4 (12)
 
-        ; ppu dot range here: 336 - 356
+        ; setup for CHR0 bank switching
+        ; note: we intentionally ignore the shadow register here, instead
+        ; we'll restore that when exiting the vector
+        lda #(MMC3_BANKING_MODE + 0) ; 2 (6)
+        sta MMC3_BANK_SELECT ; 4 (12)
+
+        ; ppu dot range here: 13 - 33
 
         ; initial spinwait would go here, for early buffer timing
 
-        .repeat 15
+        .repeat 12
         nop
-        .endrep ; 30 (90)
+        .endrep ; 24 (72)
 
         ; ppu dot range here: 85 - 105
 
@@ -130,25 +136,32 @@ split_xy_begin:
         lda irq_table_scroll_x, y ; 4 (12)
         ldx irq_table_nametable_low, y ; 4 (12)
 
-        ; ppu dot range here: 187 - 207
+        ; put the scroll x on the stack too
+        pha ; 3 (9)
 
-        ; from here need to burn 23 cycles to be in range for the write
-        ; first 7 cycles with a stack poke
-        php ; 3 (12)
-        plp ; 4 (9)
+        ; ppu dot range here: 196 - 207
+
         ; now the remaining 16 with a nop chain
-        .repeat 8
+        .repeat 4
         nop
-        .endrep ; 16 (48)
+        .endrep ; 8 (24)
+
+        ; perform the CHR0 bank swap here; this is timed as late as possible before the scroll
+        ; writes so that it overlaps with the last byte the PPU fetches for backgrounds, which is
+        ; technically read and loaded into the shift buffer, but too late to show up onscreen
+        ; the thinking is that if we corrupt these, it should be invisible
+        lda irq_table_chr0_bank, x ; 4 (12)
+        sta MMC3_BANK_DATA ; 4 (12)
+        ; restore scroll_x from the stack
+        pla ; 4 (12)
 
         ; ppu dot range here: 256 - 276
 
-        ; now perform the last two writes:
+        ; perform the last two scroll writes:
         sta $2005 ; 4 (12)
         stx $2006 ; 4 (12)
 
         ; ppu dot range here: 280 - 300
-
 
         pla ; 4 (12)
         sta PPUMASK ; 4 (12)
@@ -192,7 +205,7 @@ delay_with_mmc3_irq:
         pla
         tax
         pla
-        
+
         ; all done
         rti
 .endproc

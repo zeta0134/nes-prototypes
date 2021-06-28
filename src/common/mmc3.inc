@@ -10,6 +10,14 @@ MMC3_IRQ_ENABLE  = $E001
 ; project global
 MMC3_BANKING_MODE = %00000000
 
+.macro mmc3_select_bank register_index, bank_number
+        lda #(MMC3_BANKING_MODE + register_index) ; CHR_2K_LOW
+        sta mmc3_bank_select_shadow
+        sta MMC3_BANK_SELECT
+        lda bank_number
+        sta MMC3_BANK_DATA
+.endmacro
+
 .ifndef _MMC3_INC
 _MMC3_INC := 1
 

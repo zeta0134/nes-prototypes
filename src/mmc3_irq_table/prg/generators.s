@@ -126,7 +126,7 @@ loop:
         sta irq_table_ppumask, x
 
         ; chr bank: for debugging, invert it!
-        lda #$01
+        lda #$04
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count

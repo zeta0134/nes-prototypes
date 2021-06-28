@@ -14,14 +14,6 @@ mmc3_bank_select_shadow: .byte $00
 
 .export initialize_mmc3
 
-.macro mmc3_select_bank register_index, bank_number
-        lda #(MMC3_BANKING_MODE + register_index) ; CHR_2K_LOW
-        sta mmc3_bank_select_shadow
-        sta MMC3_BANK_SELECT
-        lda bank_number
-        sta MMC3_BANK_DATA
-.endmacro
-
 .proc initialize_mmc3
         ; Note: the high bits of MMC3_BANK_SELECT determine the mode.
         ; We have this at %10 on purpose, which puts CHR1 in 2k mode,

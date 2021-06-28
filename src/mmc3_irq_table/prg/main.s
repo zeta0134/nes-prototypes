@@ -209,6 +209,9 @@ no_wrap:
 
         inc nmi_counter
 
+        ; prep for raster: CHR 0 begins with bank 0 in the top section
+        mmc3_select_bank $0, #$00
+
         jsr setup_irq_for_frame
 
         ; restore registers
