@@ -71,7 +71,6 @@ loop:
         sta irq_table_scroll_x, x
         sta irq_table_scroll_y, x
         sta irq_table_nametable_high, x
-        sta irq_table_nametable_low, x
         sta irq_table_chr0_bank, x
         lda #$1F
         sta irq_table_ppumask, x
@@ -171,6 +170,7 @@ no_wrap:
         sta irq_generation_index
 
         lda #176
+        ;lda #120
         sta pixels_to_generate
 
         ; initialize scroll registers

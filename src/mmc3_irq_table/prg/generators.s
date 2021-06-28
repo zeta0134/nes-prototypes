@@ -30,23 +30,6 @@ base_y: .byte $00
 
         .segment "PRGLAST_E000"
 
-; for generating the funky 4th byte
-.macro nametable_low scroll_x, scroll_y
-        .byte ((scroll_x & %11111000) >> 3) | ((scroll_y & %00111000) << 2)
-.endmacro
-
-; for runtime generation without expensive bitfield manipulation, just read
-; from both tables and OR together
-nametable_low_x_table:
-        .repeat 256, scroll_x
-        .byte ((scroll_x & %11111000) >> 3)
-        .endrep
-
-nametable_low_y_table:
-        .repeat 256, scroll_y
-        .byte ((scroll_y & %00111000) << 2)
-        .endrep
-
 ; =========== Various generators, mostly separated by intended function ============= ;
 
 .proc generate_x_distortion
@@ -113,20 +96,12 @@ loop:
         lda temp_y
         sta irq_table_scroll_y, x
 
-        ; the low nametable byte utilizes our LUT
-        ldx temp_x
-        lda nametable_low_x_table, x
-        ldx temp_y
-        ora nametable_low_y_table, x
-        ldx irq_generation_index
-        sta irq_table_nametable_low, x
-
         ; ppumask: for debugging, make it blue!
         lda #($1E | TINT_B)
         sta irq_table_ppumask, x
 
         ; chr bank: for debugging, invert it!
-        lda #$04
+        lda #$00
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count
@@ -205,14 +180,6 @@ cleanup:
         clc
         adc #176
         sta irq_table_scroll_y, x
-
-        ; reordered a bit, to reuse scroll_y which is already in a
-        tax
-        lda nametable_low_y_table, x
-        ldx base_x
-        ora nametable_low_x_table, x
-        ldx irq_generation_index
-        sta irq_table_nametable_low, x
 
         ; ppumask: for debugging, make it normal
         lda #$1E

@@ -9,6 +9,7 @@ active_irq_index: .byte $00
 inactive_irq_index: .byte $00
 irq_table_index: .byte $00
 two_thirds_temp: .byte $00
+irq_stash: .byte $00
 
 .exportzp active_irq_index, inactive_irq_index
 
@@ -24,11 +25,10 @@ irq_table_scanlines: .res IRQ_TABLE_SIZE
 irq_table_nametable_high: .res IRQ_TABLE_SIZE
 irq_table_scroll_y: .res IRQ_TABLE_SIZE
 irq_table_scroll_x: .res IRQ_TABLE_SIZE
-irq_table_nametable_low: .res IRQ_TABLE_SIZE
 irq_table_ppumask: .res IRQ_TABLE_SIZE
 irq_table_chr0_bank: .res IRQ_TABLE_SIZE
 
-.export irq_table_scanlines, irq_table_nametable_high, irq_table_scroll_y, irq_table_scroll_x, irq_table_nametable_low, irq_table_ppumask, irq_table_chr0_bank
+.export irq_table_scanlines, irq_table_nametable_high, irq_table_scroll_y, irq_table_scroll_x, irq_table_ppumask, irq_table_chr0_bank
 
         .segment "PRGLAST_E000"
 
@@ -118,30 +118,36 @@ continue:
         ; prep initial bytes for writing
 split_xy_begin:
         ldy irq_table_index ; 3 (9)
-        lda irq_table_nametable_high, y ; 4 (12)
-        ldx irq_table_scroll_y, y  ; 4 (12)
+        ldx irq_table_nametable_high, y ; 4 (12)
+        lda irq_table_scroll_y, y  ; 4 (12)
 
         ; ppu dot range here: 82 - 102
 
         ; write first two bytes during *current* scanline (no visible change)
-        sta $2006 ; 4 (12)
-        stx $2005 ; 4 (12)
+        stx $2006 ; 4 (12)
+        sta $2005 ; 4 (12)
 
-        ; prep for second write
+        ; calculate the nametable byte, a already contains scroll_y
+        and #$F8 ; 2 (6)
+        asl ; 2 (6) 
+        asl ; 2 (6)
+        sta irq_stash ; 3 (9)
+
         lda irq_table_scroll_x, y ; 4 (12)
-        ldx irq_table_nametable_low, y ; 4 (12)
-
-        ; put the scroll x on the stack too
+        ; stash this on the stack for later reading
         pha ; 3 (9)
+        lsr ; 2 (6)
+        lsr ; 2 (6)
+        lsr ; 2 (6)
+        ora irq_stash ; 3 (9)
+        ; stuff this in x for later writing
+        tax ; 2 (6)
 
-        ; ppu dot range here: 139 - 159
+        ; after nametable prep: 187 - 207
 
-        ; here we burn cycles for alignment
-        .repeat 10
-        nop
-        .endrep ; 20 (60)
-
-        ; burn 7 cycles here
+        ; burn 9 cycles here
+        nop ; 2 (6)
+        nop ; 2 (6)
         php ; 4 (12)
         plp ; 3 (9)
 
