@@ -109,11 +109,11 @@ continue:
 
         ; initial spinwait would go here, for early buffer timing
 
-        .repeat 12
+        .repeat 6
         nop
-        .endrep ; 24 (72)
+        .endrep ; 12 (36)
 
-        ; ppu dot range here: 85 - 105
+        ; ppu dot range here: 49 - 69
 
         ; prep initial bytes for writing
 split_xy_begin:
@@ -121,15 +121,11 @@ split_xy_begin:
         lda irq_table_nametable_high, y ; 4 (12)
         ldx irq_table_scroll_y, y  ; 4 (12)
 
-        ; ppu dot range here: 118 - 138
+        ; ppu dot range here: 82 - 102
 
         ; write first two bytes during *current* scanline (no visible change)
         sta $2006 ; 4 (12)
         stx $2005 ; 4 (12)
-
-        ; burn 7 cycles here
-        php ; 4 (12)
-        plp ; 3 (9)
 
         ; prep for second write
         lda irq_table_scroll_x, y ; 4 (12)
@@ -138,12 +134,16 @@ split_xy_begin:
         ; put the scroll x on the stack too
         pha ; 3 (9)
 
-        ; ppu dot range here: 196 - 207
+        ; ppu dot range here: 139 - 159
 
-        ; now the remaining 16 with a nop chain
-        .repeat 4
+        ; here we burn cycles for alignment
+        .repeat 10
         nop
-        .endrep ; 8 (24)
+        .endrep ; 20 (60)
+
+        ; burn 7 cycles here
+        php ; 4 (12)
+        plp ; 3 (9)
 
         ; perform the CHR0 bank swap here; this is timed as late as possible before the scroll
         ; writes so that it overlaps with the last byte the PPU fetches for backgrounds, which is
@@ -162,7 +162,7 @@ split_xy_begin:
 
         ; ppu dot range here: 280 - 300
 
-        lda irq_table_ppumask, y
+        lda irq_table_ppumask, y ; 4 (12)
         sta PPUMASK ; 4 (12)
 
         ; end timing sensitive code; prep for next scanline
@@ -176,13 +176,8 @@ delay_with_cpu:
         ; we've already missed the rising A12 edge, so here we need to use the CPU to delay
         ; at this stage we are within dots: 2 - 22
 
-        ; accounting for the jmp, we need to burn exactly 35.6667 dots. We can deal with 12.6667 of those here:
+        ; accounting for the jmp, we need to burn exactly 15.6667 dots. We can deal with 12.6667 of those here:
         burn_12_and_two_thirds_cycles ; 12.667 (~38)
-
-        ; now we need to burn 20 cycles
-        .repeat 6
-        nop 
-        .endrep ; 12 (36)
 
         ; ... and the jmp consumes the last 3
         jmp split_xy_begin ; 3 (9) 
