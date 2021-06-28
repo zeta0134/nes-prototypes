@@ -106,8 +106,8 @@ continue:
         sta MMC3_BANK_SELECT ; 4 (12)
 
         ; ppu dot range here: 13 - 33
-
-        ; initial spinwait would go here, for early buffer timing
+        ; note: adjust this nop chain to alter alignment as a whole, both for IRQ-triggered
+        ; writes and CPU-delay timed ones that follow 1px segments
 
         .repeat 6
         nop
@@ -115,8 +115,9 @@ continue:
 
         ; ppu dot range here: 49 - 69
 
-        ; prep initial bytes for writing
+        ; CPU-delayed 1px scanlines will merge here:
 split_xy_begin:
+        ; prep initial bytes for writing
         ldy irq_table_index ; 3 (9)
         ldx irq_table_nametable_high, y ; 4 (12)
         lda irq_table_scroll_y, y  ; 4 (12)
@@ -143,7 +144,7 @@ split_xy_begin:
         ; stuff this in x for later writing
         tax ; 2 (6)
 
-        ; after nametable prep: 187 - 207
+        ; ppu dot range here: 187 - 207
 
         ; burn 9 cycles here
         nop ; 2 (6)
@@ -151,12 +152,17 @@ split_xy_begin:
         php ; 4 (12)
         plp ; 3 (9)
 
-        ; perform the CHR0 bank swap here; this is timed as late as possible before the scroll
-        ; writes so that it overlaps with the last byte the PPU fetches for backgrounds, which is
-        ; technically read and loaded into the shift buffer, but too late to show up onscreen
-        ; the thinking is that if we corrupt these, it should be invisible
+        ; ppu dot range here: 220 - 240
+
+        ; perform the CHR0 bank swap here; this is timed as late as possible to minimize the
+        ; chance of a visible glitch
+        ; (todo: if we can remove the pla, we can guarantee a glitch-free write, as written we
+        ; are a cycle or two early and might occasionally glitch depending on IRQ jitter)
         lda irq_table_chr0_bank, x ; 4 (12)
         sta MMC3_BANK_DATA ; 4 (12)
+
+        ; ppu dot range here: 244 - 264
+
         ; restore scroll_x from the stack
         pla ; 4 (12)
 
@@ -196,6 +202,7 @@ delay_with_mmc3_irq:
         sta MMC3_IRQ_ENABLE
 
         ; since we possibly clobbered the MMC3 bank select register, restore the shadow copy here
+        ; (99% of the time this will have no effect, but if we interrupted a far call...)
         lda mmc3_bank_select_shadow
         sta MMC3_BANK_SELECT
 
