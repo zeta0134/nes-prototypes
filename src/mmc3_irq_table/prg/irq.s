@@ -127,10 +127,9 @@ split_xy_begin:
         sta $2006 ; 4 (12)
         stx $2005 ; 4 (12)
 
-        ; put PPUMASK byte on the stack
-
-        lda irq_table_ppumask, y ; 4 (12)
-        pha ; 3 (9)
+        ; burn 7 cycles here
+        php ; 4 (12)
+        plp ; 3 (9)
 
         ; prep for second write
         lda irq_table_scroll_x, y ; 4 (12)
@@ -163,7 +162,7 @@ split_xy_begin:
 
         ; ppu dot range here: 280 - 300
 
-        pla ; 4 (12)
+        lda irq_table_ppumask, y
         sta PPUMASK ; 4 (12)
 
         ; end timing sensitive code; prep for next scanline
