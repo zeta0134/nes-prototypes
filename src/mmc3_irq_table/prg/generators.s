@@ -97,11 +97,11 @@ loop:
         sta irq_table_scroll_y, x
 
         ; ppumask: for debugging, make it blue!
-        lda #($1E | TINT_B)
+        lda #$1E
         sta irq_table_ppumask, x
 
         ; chr bank: for debugging, invert it!
-        lda #$00
+        lda #$04
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count

@@ -29,11 +29,18 @@ test_nametable:
 test_palette:
         .incbin "nes-palettes.pal"
 
+circles_nametable:
+        .incbin "circles-nametable.nam"
+circles_palette:
+        .incbin "circle-palettes.pal"
+
+
+
 .proc init_palettes
         set_ppuaddr #$3F00
         ldx #0
 loop:
-        lda test_palette, x
+        lda circles_palette, x
         sta PPUDATA
         inx
         cpx #16
@@ -43,16 +50,30 @@ loop:
 .endproc
         
 .proc init_nametable
+; left side
         st16 R0, ($400 + $100 - $1)
         st16 ptr, test_nametable
         set_ppuaddr #$2000
         ldy #0
-loop:
+left_side_loop:
         lda (ptr), y
         sta PPUDATA
         inc16 ptr
         dec16 R0
-        bne loop
+        bne left_side_loop
+
+; right side
+        st16 R0, ($400 + $100 - $1)
+        st16 ptr, circles_nametable
+        set_ppuaddr #$2400
+        ldy #0
+right_side_loop:
+        lda (ptr), y
+        sta PPUDATA
+        inc16 ptr
+        dec16 R0
+        bne right_side_loop
+
 
         rts
 .endproc
@@ -170,11 +191,10 @@ no_wrap:
         sta irq_generation_index
 
         lda #176
-        ;lda #120
         sta pixels_to_generate
 
         ; initialize scroll registers
-        lda camera_nametable
+        lda #$01
         sta base_nametable
         lda camera_x
         sta base_x
@@ -195,6 +215,9 @@ no_wrap:
         sta initial_pixel_offset
 
         jsr generate_x_distortion
+
+        lda #$00
+        sta base_nametable
         jsr generate_final_entry
         rts
 .endproc

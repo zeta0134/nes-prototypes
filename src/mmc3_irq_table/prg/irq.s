@@ -158,7 +158,7 @@ split_xy_begin:
         ; chance of a visible glitch
         ; (todo: if we can remove the pla, we can guarantee a glitch-free write, as written we
         ; are a cycle or two early and might occasionally glitch depending on IRQ jitter)
-        lda irq_table_chr0_bank, x ; 4 (12)
+        lda irq_table_chr0_bank, y ; 4 (12)
         sta MMC3_BANK_DATA ; 4 (12)
 
         ; ppu dot range here: 244 - 264

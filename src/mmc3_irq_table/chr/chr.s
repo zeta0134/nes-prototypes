@@ -6,4 +6,4 @@
 
         .segment "CHR1"
         .align $800
-        .incbin "nes-tiles-inverted.chr"
+        .incbin "circle_tiles_2k.chr"
