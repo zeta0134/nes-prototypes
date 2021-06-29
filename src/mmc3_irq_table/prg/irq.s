@@ -110,7 +110,7 @@ continue:
         ; writes and CPU-delay timed ones that follow 1px segments
 
         ; For a real MMC3
-        .repeat 10
+        .repeat 6
         nop
         .endrep ; 12 (36)
 
