@@ -109,7 +109,8 @@ continue:
         ; note: adjust this nop chain to alter alignment as a whole, both for IRQ-triggered
         ; writes and CPU-delay timed ones that follow 1px segments
 
-        .repeat 6
+        ; For a real MMC3
+        .repeat 10
         nop
         .endrep ; 12 (36)
 

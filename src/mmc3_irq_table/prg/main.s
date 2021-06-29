@@ -163,7 +163,7 @@ loop:
 gameloop:
         inc fx_offset
         lda fx_offset
-        cmp #64
+        cmp #128
         bne no_wrap
         lda #0
         sta fx_offset
@@ -201,23 +201,48 @@ no_wrap:
         lda camera_y
         ; apply initial offset to get us to the starting point of the distortion effect
         ; note: later we'll want to vary the initial offset
-        clc
-        adc #32
+        ; lol just kidding, don't do this for the current setup
         sta base_y
 
-        st16 fx_pattern_table_ptr, interleaved_sine_pattern
-        st16 fx_scanline_table_ptr, interleaved_sine_scanlines
-        lda #(INTERLEAVED_SINE_LENGTH)
+        ;st16 fx_pattern_table_ptr, interleaved_sine_pattern
+        ;st16 fx_scanline_table_ptr, interleaved_sine_scanlines
+        ;lda #(INTERLEAVED_SINE_LENGTH)
+
+        ;st16 fx_pattern_table_ptr, very_curved_sine_pattern
+        ;st16 fx_scanline_table_ptr, very_curved_sine_scanlines
+        ;lda #(VERY_CURVED_SINE_LENGTH)
+
+        ;st16 fx_pattern_table_ptr, sine_64x_16s_pattern
+        ;st16 fx_scanline_table_ptr, sine_64x_16s_scanlines
+        ;lda #(SINE_64X_16S_ENTRIES)
+
+        st16 fx_pattern_table_ptr, sine_64x_32s_pattern
+        st16 fx_scanline_table_ptr, sine_64x_32s_scanlines
+        lda #(SINE_64X_32S_ENTRIES)
 
         sta fx_table_size
 
         lda fx_offset
         sta initial_pixel_offset
 
-        jsr generate_x_distortion
+        ;jsr generate_x_distortion
+        jsr generate_y_distortion
 
         lda #$00
         sta base_nametable
+
+        dec camera_y
+        dec camera_y
+        lda camera_y
+        cmp #254
+        bne no_camera_wrap
+        lda #238
+        sta camera_y
+no_camera_wrap:
+
+        lda #32
+        sta base_y
+
         jsr generate_final_entry
         rts
 .endproc
