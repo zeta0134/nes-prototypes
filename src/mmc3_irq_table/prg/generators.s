@@ -254,12 +254,12 @@ temp_y_is_fine:
         lda temp_y
         sta irq_table_scroll_y, x
 
-        ; ppumask is normal
-        lda #$1E
+        ; ppumask is RED
+        lda #($1E | TINT_R | TINT_G)
         sta irq_table_ppumask, x
 
         ; chr bank should be #$04 for this effect
-        lda #$04
+        lda #$06
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count

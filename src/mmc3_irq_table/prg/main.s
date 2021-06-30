@@ -21,6 +21,9 @@ camera_nametable: .byte $00
 camera_x: .byte $00
 camera_y: .byte $00
 
+palette_cycle_delay: .byte $00
+palette_counter: .byte $00
+
         .segment "PRGLAST_E000"
         .export start, nmi
 
@@ -34,19 +37,70 @@ circles_nametable:
 circles_palette:
         .incbin "circle-palettes.pal"
 
+no3_nametable:
+        .incbin "no3_starburst_2.nam"
 
+no3_palette_raw:
+        .repeat 2
+        ;.byte $07, $07, $07, $17, $17, $27, $37, $27, $17, $17, $07
+        .byte $15, $26, $37, $26, $15
+        .endrep
 
 .proc init_palettes
         set_ppuaddr #$3F00
         ldx #0
 loop:
-        lda circles_palette, x
+        lda test_palette, x
         sta PPUDATA
         inx
         cpx #16
         bne loop
 
         rts
+.endproc
+
+.proc cycle_raw_no3_palette
+        dec palette_cycle_delay
+        bne done
+        lda #9
+        sta palette_cycle_delay
+
+        set_ppuaddr #$3F00
+        ldx palette_counter
+        lda no3_palette_raw+0, x
+        sta PPUDATA
+        lda no3_palette_raw+1, x
+        sta PPUDATA
+        lda no3_palette_raw+2, x
+        sta PPUDATA
+        lda no3_palette_raw+3, x
+        sta PPUDATA
+        lda no3_palette_raw+0, x
+        sta PPUDATA
+        lda no3_palette_raw+2, x
+        sta PPUDATA
+        lda no3_palette_raw+3, x
+        sta PPUDATA
+        lda no3_palette_raw+4, x
+        sta PPUDATA
+        lda no3_palette_raw+0, x
+        sta PPUDATA
+        lda no3_palette_raw+3, x
+        sta PPUDATA
+        lda no3_palette_raw+4, x
+        sta PPUDATA
+        lda no3_palette_raw+1, x
+        sta PPUDATA
+
+        dec palette_counter
+        lda palette_counter
+        cmp #$FF
+        bne done
+        lda #4
+        sta palette_counter
+done:
+        rts
+
 .endproc
         
 .proc init_nametable
@@ -64,7 +118,8 @@ left_side_loop:
 
 ; right side
         st16 R0, ($400 + $100 - $1)
-        st16 ptr, circles_nametable
+        ;st16 ptr, circles_nametable
+        st16 ptr, no3_nametable
         set_ppuaddr #$2400
         ldy #0
 right_side_loop:
@@ -134,6 +189,12 @@ loop:
         lda #0
         sta inactive_irq_index
         sta fx_offset
+        
+        lda #32
+        sta camera_y
+
+        lda #10
+        sta palette_cycle_delay
         
         ; generate that beginning table
         jsr update_fx_table
@@ -212,13 +273,13 @@ no_wrap:
         ;st16 fx_scanline_table_ptr, very_curved_sine_scanlines
         ;lda #(VERY_CURVED_SINE_LENGTH)
 
-        ;st16 fx_pattern_table_ptr, sine_64x_16s_pattern
-        ;st16 fx_scanline_table_ptr, sine_64x_16s_scanlines
-        ;lda #(SINE_64X_16S_ENTRIES)
+        st16 fx_pattern_table_ptr, sine_64x_16s_pattern
+        st16 fx_scanline_table_ptr, sine_64x_16s_scanlines
+        lda #(SINE_64X_16S_ENTRIES)
 
-        st16 fx_pattern_table_ptr, sine_64x_32s_pattern
-        st16 fx_scanline_table_ptr, sine_64x_32s_scanlines
-        lda #(SINE_64X_32S_ENTRIES)
+        ;st16 fx_pattern_table_ptr, sine_64x_32s_pattern
+        ;st16 fx_scanline_table_ptr, sine_64x_32s_scanlines
+        ;lda #(SINE_64X_32S_ENTRIES)
 
         sta fx_table_size
 
@@ -231,13 +292,13 @@ no_wrap:
         lda #$00
         sta base_nametable
 
-        dec camera_y
-        dec camera_y
-        lda camera_y
-        cmp #254
-        bne no_camera_wrap
-        lda #238
-        sta camera_y
+        ;dec camera_y
+        ;dec camera_y
+        ;lda camera_y
+        ;cmp #254
+        ;bne no_camera_wrap
+        ;lda #238
+        ;sta camera_y
 no_camera_wrap:
 
         lda #32
@@ -256,6 +317,7 @@ no_camera_wrap:
         pha
 
         inc nmi_counter
+        jsr cycle_raw_no3_palette
 
         ; prep for raster: CHR 0 begins with bank 0 in the top section
         mmc3_select_bank $0, #$00
