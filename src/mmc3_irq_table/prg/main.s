@@ -163,7 +163,7 @@ loop:
 gameloop:
         inc fx_offset
         lda fx_offset
-        cmp #196
+        cmp #128
         bne no_wrap
         lda #0
         sta fx_offset

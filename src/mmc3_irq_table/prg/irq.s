@@ -1,5 +1,6 @@
         .setcpu "6502"
 
+        .include "branch_checks.inc"
         .include "nes.inc"
         .include "mmc3.inc"
 
@@ -44,7 +45,7 @@ irq_table_chr0_bank: .res IRQ_TABLE_SIZE
         lda two_thirds_temp
         adc #170
         sta two_thirds_temp
-        bcs continue
+        bcsnw continue
 continue:
 .endscope
 .endmacro
@@ -181,19 +182,54 @@ split_xy_begin:
         ; end timing sensitive code; prep for next scanline
         inc irq_table_index ; 5 (15)
 
-        ; Wait the requisite number of scanlines before the next 
+        ; Wait the requisite number of scanlines before the next
+check_1px:
         lda irq_table_scanlines, y ; 4 (12)
         cmp #$01 ; 2 (6)
-        bne delay_with_mmc3_irq ; when not taken: 2 (6)
-delay_with_cpu:
+        bnenw check_2px ; when not taken: 2 (6), when taken: 3 (9)
+delay_1px_with_cpu:
         ; we've already missed the rising A12 edge, so here we need to use the CPU to delay
         ; at this stage we are within dots: 2 - 22
 
-        ; accounting for the jmp, we need to burn exactly 15.6667 dots. We can deal with 12.6667 of those here:
+        ; accounting for the jmp, we need to burn exactly 15.6667 cycles. We can deal with 12.6667 of those here:
         burn_12_and_two_thirds_cycles ; 12.667 (~38)
 
         ; ... and the jmp consumes the last 3
-        jmp split_xy_begin ; 3 (9) 
+        jmp split_xy_begin ; 3 (9)
+
+check_2px:
+        ; ppu dot range here: 5 - 25
+
+        ; as it turns out, writing $00 to the scanline counter is inconsistent across MMC3 clones, flashcarts,
+        ; and some older emulators. While it should work in theory on real hardware, it is safer to also use
+        ; a CPU timed delay in this case
+        cmp #$02 ; 2 (6)
+        bne delay_with_mmc3_irq ; when not taken: 2 (6)
+
+        ; ppu dot range here: 17 - 37
+
+        ; now we need to burn 10.667 (for alignment) plus 113.667 (one entire scanline), for a total
+        ; of 124.333
+        ; First let's deal with that 1/3 cycle nonsense
+        burn_12_and_two_thirds_cycles ; 12.667 (~38)
+        burn_12_and_two_thirds_cycles ; 12.667 (~38)
+        
+        ; now there are 99 cycles left to burn
+        ; let's do 96 of them with two timed bits of magic
+
+        ; 48 cycles here (144)
+        nop
+        ldy #9
+        dey
+        bnenw *-1
+        ; ... and again (144)
+        nop
+        ldy #9
+        dey
+        bnenw *-1
+
+        ; and the jmp takes care of the last 3
+        jmp split_xy_begin; 3 (9)
 
 delay_with_mmc3_irq:
         sec
