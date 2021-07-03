@@ -46,6 +46,35 @@ no3_palette_raw:
         .byte $15, $26, $37, $26, $15
         .endrep
 
+.struct EffectData
+        NametablePtr .word
+        InitialPalettePtr .word
+        PaletteCycleProc .word
+        GeneratorProc .word
+        GeneratorPatternPtr .word
+        GeneratorScanlinePtr .word
+        GeneratorLength .byte
+        CameraInitX .byte
+        CameraInitY .byte
+        CameraScrollX .byte
+        CameraScrollY .byte
+.endstruct
+
+; ===== Big list of Effect Configurationa =====
+
+no3_effect:
+        .word no3_nametable
+        .word test_palette ; overwritten immediately
+        .word cycle_raw_no3_palette
+        .word generate_y_distortion
+        .word sine_64x_16s_pattern
+        .word sine_64x_16s_scanlines
+        .byte SINE_64X_16S_ENTRIES
+        .byte $0 ; init camera x
+        .byte $0 ; init camera y
+        .byte $0 ; scroll amount x
+        .byte $0 ; scroll amount y
+
 .proc init_palettes
         set_ppuaddr #$3F00
         ldx #0
@@ -110,7 +139,6 @@ loop:
         sta palette_counter
 done:
         rts
-
 .endproc
         
 .proc init_nametable
