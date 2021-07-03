@@ -59,6 +59,16 @@ loop:
         rts
 .endproc
 
+.proc init_oam
+        lda #$FF
+        ldx #$00
+loop:
+        sta $0200,x
+        inx
+        bne loop
+        rts
+.endproc
+
 .proc cycle_raw_no3_palette
         dec palette_cycle_delay
         bne done
@@ -179,6 +189,7 @@ loop:
 
         jsr initialize_mmc3
         jsr init_palettes
+        jsr init_oam
         jsr init_nametable
 
         jsr clear_irq_table
@@ -315,6 +326,12 @@ no_camera_wrap:
         pha
         tya
         pha
+
+        ; do the sprite thing
+        lda #$00
+        sta OAMADDR
+        lda #$02
+        sta OAM_DMA
 
         inc nmi_counter
         jsr cycle_raw_no3_palette
