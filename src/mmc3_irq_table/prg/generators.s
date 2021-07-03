@@ -25,8 +25,10 @@ fx_table_size: .byte $00
 base_nametable: .byte $00
 base_x: .byte $00
 base_y: .byte $00
+base_chr: .byte $00
+base_ppumask: .byte $00
 
-.exportzp base_x, base_y, base_nametable
+.exportzp base_x, base_y, base_nametable, base_chr, base_ppumask
 
         .segment "PRGLAST_E000"
 
@@ -96,12 +98,10 @@ loop:
         lda temp_y
         sta irq_table_scroll_y, x
 
-        ; ppumask: for debugging, make it blue!
-        lda #$1E
+        ; these distortions don't modify chr or ppumask, so we'll always use the base value here
+        lda base_ppumask
         sta irq_table_ppumask, x
-
-        ; chr bank: for debugging, invert it!
-        lda #$04
+        lda base_chr
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count
@@ -254,12 +254,10 @@ temp_y_is_fine:
         lda temp_y
         sta irq_table_scroll_y, x
 
-        ; ppumask is RED
-        lda #($1E | TINT_R | TINT_G)
+        ; these distortions don't modify chr or ppumask, so we'll always use the base value here
+        lda base_ppumask
         sta irq_table_ppumask, x
-
-        ; chr bank should be #$04 for this effect
-        lda #$06
+        lda base_chr
         sta irq_table_chr0_bank, x
 
         ; finally the scanline count

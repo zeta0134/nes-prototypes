@@ -12,6 +12,7 @@
         .zeropage
 
 ptr: .word $0000
+fx_ptr: .word $0000
 
         .segment "RAM"
 nmi_counter: .byte $00
@@ -54,10 +55,12 @@ no3_palette_raw:
         GeneratorPatternPtr .word
         GeneratorScanlinePtr .word
         GeneratorLength .byte
-        CameraInitX .byte
+        CameraInitX .word
         CameraInitY .byte
         CameraScrollX .byte
         CameraScrollY .byte
+        BaseChrBank .byte
+        BasePpuMask .byte
 .endstruct
 
 ; ===== Big list of Effect Configurationa =====
@@ -70,21 +73,58 @@ no3_effect:
         .word sine_64x_16s_pattern
         .word sine_64x_16s_scanlines
         .byte SINE_64X_16S_ENTRIES
-        .byte $0 ; init camera x
-        .byte $0 ; init camera y
-        .byte $0 ; scroll amount x
-        .byte $0 ; scroll amount y
+        .byte 0, 1 ; init camera x, nametable
+        .byte 32 ; init camera y
+        .byte 0 ; scroll amount x
+        .byte 0 ; scroll amount y
+        .byte $06 ; chr bank
+        .byte ($1E | TINT_R | TINT_G) ; ppumask
 
-.proc init_palettes
+drippy_circles:
+        .word circles_nametable
+        .word circles_palette ; overwritten immediately
+        .word do_nothing
+        .word generate_y_distortion
+        .word sine_64x_32s_pattern
+        .word sine_64x_32s_scanlines
+        .byte SINE_64X_32S_ENTRIES
+        .byte 0, 1 ; init camera x, nametable
+        .byte 32 ; init camera y
+        .byte 0 ; scroll amount x
+        .byte 0 ; scroll amount y
+        .byte $04 ; chr bank
+        .byte $1E ; ppumask
+
+interleaved_nes:
+        .word test_nametable
+        .word test_palette ; overwritten immediately
+        .word do_nothing
+        .word generate_x_distortion
+        .word interleaved_sine_pattern
+        .word interleaved_sine_scanlines
+        .byte INTERLEAVED_SINE_LENGTH
+        .byte 0, 0 ; init camera x, nametable
+        .byte 32 ; init camera y
+        .byte 0 ; scroll amount x
+        .byte 0 ; scroll amount y
+        .byte $00 ; chr bank
+        .byte $1E ; ppumask
+
+.proc do_nothing
+        ; does what it says on the tin
+        rts
+.endproc
+
+; put the palette you want to load in ptr
+.proc load_palette
         set_ppuaddr #$3F00
-        ldx #0
+        ldy #0
 loop:
-        lda test_palette, x
+        lda (ptr), y
         sta PPUDATA
-        inx
-        cpx #16
+        iny
+        cpy #16
         bne loop
-
         rts
 .endproc
 
@@ -141,32 +181,17 @@ done:
         rts
 .endproc
         
-.proc init_nametable
+; put the nametable you want to load in ptr, the destination in PPUADDR
+.proc load_nametable
 ; left side
         st16 R0, ($400 + $100 - $1)
-        st16 ptr, test_nametable
-        set_ppuaddr #$2000
         ldy #0
-left_side_loop:
+loop:
         lda (ptr), y
         sta PPUDATA
         inc16 ptr
         dec16 R0
-        bne left_side_loop
-
-; right side
-        st16 R0, ($400 + $100 - $1)
-        ;st16 ptr, circles_nametable
-        st16 ptr, no3_nametable
-        set_ppuaddr #$2400
-        ldy #0
-right_side_loop:
-        lda (ptr), y
-        sta PPUDATA
-        inc16 ptr
-        dec16 R0
-        bne right_side_loop
-
+        bne loop
 
         rts
 .endproc
@@ -216,9 +241,11 @@ loop:
         sta PPUCTRL ; and NMI
 
         jsr initialize_mmc3
-        jsr init_palettes
         jsr init_oam
-        jsr init_nametable
+
+        st16 ptr, test_nametable
+        set_ppuaddr #$2000
+        jsr load_nametable
 
         jsr clear_irq_table
         
@@ -227,15 +254,16 @@ loop:
         sta active_irq_index
         lda #0
         sta inactive_irq_index
-        sta fx_offset
-        
-        lda #32
-        sta camera_y
 
-        lda #10
-        sta palette_cycle_delay
+        ; pick an effect
+        ;st16 fx_ptr, no3_effect
+        ;st16 fx_ptr, drippy_circles
+        st16 fx_ptr, interleaved_nes
+
+        ; initialize the effect
+        jsr init_effect
         
-        ; generate that beginning table
+        ; generate the first frame of the effect in the IRQ table
         jsr update_fx_table
         ; use the generated table
         jsr swap_irq_buffers
@@ -284,6 +312,50 @@ no_wrap:
         rts
 .endproc
 
+; assumed fx_ptr is preloaded with the selected effect; clobbers all state
+.proc init_effect
+        ; load in the selected base palette for this effect
+        ldy #EffectData::InitialPalettePtr
+        lda (fx_ptr), y
+        sta ptr
+        iny
+        lda (fx_ptr), y
+        sta ptr+1
+        set_ppuaddr #$2400
+        jsr load_palette
+
+        ; load in the nametable (effect nametables always go in the right table, deal)
+        ldy #EffectData::NametablePtr
+        lda (fx_ptr), y
+        sta ptr
+        iny
+        lda (fx_ptr), y
+        sta ptr+1
+        set_ppuaddr #$2400
+        jsr load_nametable
+
+        ; initialize camera primitives
+        ldy #EffectData::CameraInitX
+        lda (fx_ptr), y
+        sta camera_x
+        iny
+        lda (fx_ptr), y
+        sta camera_nametable
+        ldy #EffectData::CameraInitY
+        lda (fx_ptr), y
+        sta camera_y
+
+        ; reset various tracking counters
+        lda #0
+        sta fx_offset
+
+        ; this resets when it *reaches* zero, so initializing it to 1 forces an immediate update
+        lda #1
+        sta palette_cycle_delay
+
+        rts
+.endproc
+
 .proc update_fx_table
         ; start at the beginning of the inactive buffer
         ; (do NOT touch the active buffer)
@@ -294,42 +366,57 @@ no_wrap:
         sta pixels_to_generate
 
         ; initialize scroll registers
-        lda #$01
+        lda camera_nametable
         sta base_nametable
         lda camera_x
         sta base_x
         lda camera_y
-        ; apply initial offset to get us to the starting point of the distortion effect
-        ; note: later we'll want to vary the initial offset
-        ; lol just kidding, don't do this for the current setup
         sta base_y
 
-        ;st16 fx_pattern_table_ptr, interleaved_sine_pattern
-        ;st16 fx_scanline_table_ptr, interleaved_sine_scanlines
-        ;lda #(INTERLEAVED_SINE_LENGTH)
+        ; so far, we aren't doing weird things with chr / ppumask, but we do want to set them to
+        ; static values for certain effects, so do that here
+        ldy #EffectData::BaseChrBank
+        lda (fx_ptr), y
+        sta base_chr
+        ldy #EffectData::BasePpuMask
+        lda (fx_ptr), y
+        sta base_ppumask
 
-        ;st16 fx_pattern_table_ptr, very_curved_sine_pattern
-        ;st16 fx_scanline_table_ptr, very_curved_sine_scanlines
-        ;lda #(VERY_CURVED_SINE_LENGTH)
+        ; setup our fx pointers
+        ldy #EffectData::GeneratorPatternPtr
+        lda (fx_ptr), y
+        sta fx_pattern_table_ptr
+        iny
+        lda (fx_ptr), y
+        sta fx_pattern_table_ptr+1
 
-        st16 fx_pattern_table_ptr, sine_64x_16s_pattern
-        st16 fx_scanline_table_ptr, sine_64x_16s_scanlines
-        lda #(SINE_64X_16S_ENTRIES)
+        ldy #EffectData::GeneratorScanlinePtr
+        lda (fx_ptr), y
+        sta fx_scanline_table_ptr
+        iny
+        lda (fx_ptr), y
+        sta fx_scanline_table_ptr+1
 
-        ;st16 fx_pattern_table_ptr, sine_64x_32s_pattern
-        ;st16 fx_scanline_table_ptr, sine_64x_32s_scanlines
-        ;lda #(SINE_64X_32S_ENTRIES)
-
+        ldy #EffectData::GeneratorLength
+        lda (fx_ptr), y
         sta fx_table_size
 
         lda fx_offset
         sta initial_pixel_offset
+        
+        ldy #EffectData::GeneratorProc
+        lda (fx_ptr), y
+        sta ptr
+        iny
+        lda (fx_ptr), y
+        sta ptr+1
 
-        ;jsr generate_x_distortion
-        jsr generate_y_distortion
-
-        lda #$00
-        sta base_nametable
+        lda #>(return_from_indirect-1)
+        pha
+        lda #<(return_from_indirect-1)
+        pha
+        jmp (ptr)
+return_from_indirect:
 
         ;dec camera_y
         ;dec camera_y
@@ -340,10 +427,29 @@ no_wrap:
         ;sta camera_y
 no_camera_wrap:
 
+        lda #$00
+        sta base_nametable
         lda #32
         sta base_y
 
         jsr generate_final_entry
+        rts
+.endproc
+
+.proc update_fx_palette
+        ldy #EffectData::PaletteCycleProc
+        lda (fx_ptr), y
+        sta ptr
+        iny
+        lda (fx_ptr), y
+        sta ptr+1
+
+        lda #>(return_from_indirect-1)
+        pha
+        lda #<(return_from_indirect-1)
+        pha
+        jmp (ptr)
+return_from_indirect:
         rts
 .endproc
 
@@ -362,7 +468,7 @@ no_camera_wrap:
         sta OAM_DMA
 
         inc nmi_counter
-        jsr cycle_raw_no3_palette
+        jsr update_fx_palette
 
         ; prep for raster: CHR 0 begins with bank 0 in the top section
         mmc3_select_bank $0, #$00
