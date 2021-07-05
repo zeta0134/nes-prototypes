@@ -108,7 +108,7 @@ interleaved_nes:
         .byte 0 ; scroll amount x
         .byte 0 ; scroll amount y
         .byte $00 ; chr bank
-        .byte $1E ; ppumask
+        .byte ($1E | TINT_B) ; ppumask
 
 .proc do_nothing
         ; does what it says on the tin
