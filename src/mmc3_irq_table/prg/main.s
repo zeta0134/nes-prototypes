@@ -18,9 +18,8 @@ fx_ptr: .word $0000
 nmi_counter: .byte $00
 fx_offset: .byte $00
 
-camera_nametable: .byte $00
-camera_x: .byte $00
-camera_y: .byte $00
+camera_x: .word $0000 ; low bit of the high byte encodes the nametable (remaining 7 bits ignored)
+camera_y: .word $0000 ; high byte is useful to resolve 240px wrapping scenarios unambiguously
 
 palette_cycle_delay: .byte $00
 palette_counter: .byte $00
@@ -91,7 +90,7 @@ drippy_circles:
         .byte 0, 1 ; init camera x, nametable
         .byte 32 ; init camera y
         .byte 0 ; scroll amount x
-        .byte 0 ; scroll amount y
+        .byte $FE ; scroll amount y
         .byte $04 ; chr bank
         .byte $1E ; ppumask
 
@@ -257,8 +256,8 @@ loop:
 
         ; pick an effect
         ;st16 fx_ptr, no3_effect
-        ;st16 fx_ptr, drippy_circles
-        st16 fx_ptr, interleaved_nes
+        st16 fx_ptr, drippy_circles
+        ;st16 fx_ptr, interleaved_nes
 
         ; initialize the effect
         jsr init_effect
@@ -340,7 +339,7 @@ no_wrap:
         sta camera_x
         iny
         lda (fx_ptr), y
-        sta camera_nametable
+        sta camera_x+1
         ldy #EffectData::CameraInitY
         lda (fx_ptr), y
         sta camera_y
@@ -366,7 +365,7 @@ no_wrap:
         sta pixels_to_generate
 
         ; initialize scroll registers
-        lda camera_nametable
+        lda camera_x+1
         sta base_nametable
         lda camera_x
         sta base_x
@@ -417,14 +416,52 @@ no_wrap:
         pha
         jmp (ptr)
 return_from_indirect:
+        ; scroll the camera if the effect calls for it
+        ldy #EffectData::CameraScrollX
+        lda (fx_ptr), y
+        sadd16a camera_x
 
-        ;dec camera_y
-        ;dec camera_y
-        ;lda camera_y
-        ;cmp #254
-        ;bne no_camera_wrap
-        ;lda #238
-        ;sta camera_y
+        ; for Y, we need to check for and correct 240px wraparound
+        lda #0
+        sta camera_y+1
+        ldy #EffectData::CameraScrollY
+        lda (fx_ptr), y
+        pha ; preserve for later
+        sadd16a camera_y
+
+        lda camera_y+1
+        bmi fix_negative_temp_y
+        cmp #1
+        beq fix_positive_temp_y
+
+        lda camera_y
+        cmp #240
+        bcc temp_y_is_fine
+
+fix_temp_y:
+        pla ; grab preserved offset to check sign here
+        pha
+        bmi fix_negative_temp_y
+fix_positive_temp_y:
+        lda camera_y
+        clc
+        adc #16
+        jmp temp_y_is_fine
+fix_negative_temp_y:
+        lda camera_y
+        sec
+        sbc #16
+temp_y_is_fine:
+        sta camera_y
+        pla ; restore stack
+
+
+
+
+
+
+
+
 no_camera_wrap:
 
         lda #$00
