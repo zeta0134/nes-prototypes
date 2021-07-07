@@ -24,6 +24,22 @@ loop:
         rts
 .endproc
 
+.proc burn_a_bunch_of_time
+        ldx #$FF
+loop:
+        .repeat 4
+        nop
+        .endrep
+        dex
+        bne loop
+        rts
+.endproc
+
+.macro debug_color flags
+        lda #(BG_ON | OBJ_ON | BG_CLIP | OBJ_CLIP | flags)
+        sta PPUMASK
+.endmacro
+
 .proc start
         lda #$00
         sta PPUMASK ; disable rendering
@@ -48,7 +64,12 @@ loop:
         ; (note: not using IRQ on this project, so no setup is performed. Leave IRQ flag off)
 gameloop:
         jsr wait_for_nmi
+        jsr burn_a_bunch_of_time
+
+        debug_color TINT_R
         jsr ft_music_play
+        debug_color 0
+
         jmp gameloop ; forever
         ; this function never returns
 .endproc
