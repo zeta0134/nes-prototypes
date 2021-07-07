@@ -11,6 +11,8 @@ DBG_NAME := $(notdir $(CURDIR)).dbg
 # Assembler files, for building out the banks
 PRG_ASM_FILES := $(wildcard $(SOURCEDIR)/*.s)
 CHR_ASM_FILES := $(wildcard $(CHRDIR)/*.s)
+SND_ASM_FILES := $(wildcard $(SNDDIR)/*.s)
+
 O_FILES := \
   $(patsubst $(SOURCEDIR)/%.s,$(BUILDDIR)/%.o,$(PRG_ASM_FILES)) \
   $(patsubst $(CHRDIR)/%.s,$(BUILDDIR)/%.o,$(CHR_ASM_FILES))
