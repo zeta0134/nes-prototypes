@@ -3,6 +3,8 @@
 ;
 ; The player routine
 ;
+.export ft_music_play
+
 ft_music_play:
 	lda var_PlayerFlags					; Skip if player is disabled
 	and #%00000001						;;; ;; ; bit 0 = enable playing

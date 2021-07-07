@@ -1,5 +1,6 @@
         .setcpu "6502"
 
+        .include "ft_driver.inc"
         .include "nes.inc"
         .include "mmc3.inc"
         .include "ppu.inc"
@@ -32,6 +33,12 @@ loop:
 
         ; do graphical setup here, maybe later
 
+        ; music setup
+        lda #0 ; song number
+        ldx #0 ; NTSC timing
+        jsr ft_music_init
+
+
         ; re-enable graphics
         lda #$1E
         sta PPUMASK
@@ -41,6 +48,7 @@ loop:
         ; (note: not using IRQ on this project, so no setup is performed. Leave IRQ flag off)
 gameloop:
         jsr wait_for_nmi
+        jsr ft_music_play
         jmp gameloop ; forever
         ; this function never returns
 .endproc

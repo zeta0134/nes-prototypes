@@ -13,9 +13,9 @@ USE_LINEARPITCH = 1		;;; ;; ; Enable linear pitch code
 
 USE_DPCM = 1			; Enable DPCM channel (currently broken, leave enabled to avoid trouble).
 						; Also leave enabled when using expansion chips
-
-;INC_MUSIC_ASM = 1		; Music is in assembler style
-RELOCATE_MUSIC = 1		; Enable if music data must be relocated
+INC_MUSIC = 1
+INC_MUSIC_ASM = 1		; Music is in assembler style
+;RELOCATE_MUSIC = 1		; Enable if music data must be relocated
 
 ENABLE_ROW_SKIP = 1		; Enable this to add code for seeking to a row > 0 when using skip command
 
@@ -391,7 +391,7 @@ var_ch_EchoBuffer:		.res (ECHO_BUFFER_LENGTH + 1) * CHANNELS
 last_bss_var:			.res 1						; Not used
 
 
-.segment "PRG0_A000"
+.segment "PRGLAST_C000"
 .include "snd/longbranch.mac"		;;; ;; ;
 
 ; $9000 - $9003
@@ -618,6 +618,8 @@ bit_mask:		;;; ;; ; general-purpose bit mask
 ; The label that contains a pointer to the music data
 ;  A simple way to handle multiple songs is to move this
 ;  to RAM and setup a table of pointers to music data
+
+.segment "PRG0_A000"
 ft_music_addr:
 	.word * + 2					; This is the point where music data is stored
 

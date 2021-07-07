@@ -5,6 +5,8 @@
 ; a = song number
 ; x = ntsc/pal
 ;
+.export ft_music_init
+
 ft_music_init:
 	asl a
 	jsr ft_load_song
