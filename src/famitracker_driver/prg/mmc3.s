@@ -26,8 +26,8 @@ mmc3_bank_select_shadow: .byte $00
         mmc3_select_bank $4, #$06 ; CHR 1K C
         mmc3_select_bank $5, #$07 ; CHR 1K D
 
-        mmc3_select_bank $6, #$00 ; PRG0
-        mmc3_select_bank $7, #$00 ; PRG1
+        mmc3_select_bank $6, #$01 ; PRG0 at C000
+        mmc3_select_bank $7, #$00 ; PRG1 at A000
 
         ; Mirroring mode: vertical
         lda #$00

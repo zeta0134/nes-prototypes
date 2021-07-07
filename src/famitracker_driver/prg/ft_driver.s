@@ -391,7 +391,7 @@ var_ch_EchoBuffer:		.res (ECHO_BUFFER_LENGTH + 1) * CHANNELS
 last_bss_var:			.res 1						; Not used
 
 
-.segment "PRGLAST_C000"
+.segment "PRGLAST_8000"
 .include "snd/longbranch.mac"		;;; ;; ;
 
 ; $9000 - $9003
