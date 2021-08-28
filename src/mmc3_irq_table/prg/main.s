@@ -255,8 +255,8 @@ loop:
         sta inactive_irq_index
 
         ; pick an effect
-        ;st16 fx_ptr, no3_effect
-        st16 fx_ptr, drippy_circles
+        st16 fx_ptr, no3_effect
+        ;st16 fx_ptr, drippy_circles
         ;st16 fx_ptr, interleaved_nes
 
         ; initialize the effect
