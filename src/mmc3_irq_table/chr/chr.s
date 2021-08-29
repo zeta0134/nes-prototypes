@@ -8,3 +8,8 @@
         .align $800
         .incbin "circle_tiles_2k.chr"
         .incbin "no3_starburst_2.chr"
+
+        .segment "CHR2"
+        .align $800
+        .incbin "guardian_digger_sprite_tiles.chr"
+        

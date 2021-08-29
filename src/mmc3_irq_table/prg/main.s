@@ -48,6 +48,8 @@ guardian_battle_nametable:
         .incbin "guardian_battle.nam"
 guardian_battle_palette:
         .incbin "guardian-battle.pal"
+guardian_digger_palette:
+        .incbin "guardian-digger.pal"
 
 no3_palette_raw:
         .repeat 2
@@ -118,14 +120,104 @@ interleaved_nes:
         .byte $00 ; chr bank
         .byte ($1E | TINT_B) ; ppumask
 
+.proc init_battle_sprite
+        ldy #84 ; starting y
+        ldx #0  ; index into OAM
+loop:
+        ; unrolled loop, does an entire row in one go
+        tya
+        sta $0200, x ; y pos
+        txa 
+        lsr
+        lsr
+        sta $0201, x ; tile index
+        lda #0
+        sta $0202, x ; attributes
+        lda #112
+        sta $0203, x ; x pos
+        inx
+        inx
+        inx
+        inx
+
+        tya
+        sta $0200, x ; y pos
+        txa
+        lsr
+        lsr
+        sta $0201, x ; tile index
+        lda #0
+        sta $0202, x ; attributes
+        lda #120
+        sta $0203, x ; x pos
+        inx
+        inx
+        inx
+        inx
+
+        tya
+        sta $0200, x ; y pos
+        txa
+        lsr
+        lsr 
+        sta $0201, x ; tile index
+        lda #0
+        sta $0202, x ; attributes
+        lda #128
+        sta $0203, x ; x pos
+        inx
+        inx
+        inx
+        inx
+
+        tya
+        sta $0200, x ; y pos
+        txa
+        lsr
+        lsr 
+        sta $0201, x ; tile index
+        lda #0
+        sta $0202, x ; attributes
+        lda #136
+        sta $0203, x ; x pos
+        inx
+        inx
+        inx
+        inx
+
+        ; advance 8px downward
+        tya
+        clc
+        adc #8
+        tay
+
+        cpx #128
+        bne loop
+done:
+        rts
+.endproc
+
 .proc do_nothing
         ; does what it says on the tin
         rts
 .endproc
 
 ; put the palette you want to load in ptr
-.proc load_palette
+.proc load_bg_palette
         set_ppuaddr #$3F00
+        ldy #0
+loop:
+        lda (ptr), y
+        sta PPUDATA
+        iny
+        cpy #16
+        bne loop
+        rts
+.endproc
+
+; put the palette you want to load in ptr
+.proc load_sprite_palette
+        set_ppuaddr #$3F10
         ldy #0
 loop:
         lda (ptr), y
@@ -263,6 +355,13 @@ loop:
         lda #0
         sta inactive_irq_index
 
+        lda #<guardian_digger_palette
+        sta ptr
+        lda #>guardian_digger_palette
+        sta ptr+1
+        jsr load_sprite_palette
+        jsr init_battle_sprite
+
         ; pick an effect
         st16 fx_ptr, no3_effect
         ;st16 fx_ptr, drippy_circles
@@ -334,7 +433,7 @@ no_wrap:
         lda (fx_ptr), y
         sta ptr+1
         set_ppuaddr #$2400
-        jsr load_palette
+        jsr load_bg_palette
 
         ; load in the nametable (effect nametables always go in the right table, deal)
         ldy #EffectData::NametablePtr
