@@ -1,5 +1,6 @@
         .setcpu "6502"
 
+        .include "bhop/bhop.inc"
         .include "generators.inc"
         .include "irq.inc"
         .include "nes.inc"
@@ -23,6 +24,9 @@ camera_y: .word $0000 ; high byte is useful to resolve 240px wrapping scenarios 
 
 palette_cycle_delay: .byte $00
 palette_counter: .byte $00
+
+        .segment "PRG1_A000"
+        .include "bhop/sanctuary.asm"
 
         .segment "PRGLAST_E000"
         .export start, nmi
@@ -283,6 +287,10 @@ loop:
         ; Now it should be safe to enable interrupts for the game loop
         cli
 
+        ; initialize the music player
+        lda #0
+        jsr bhop_init
+
         ; setup for our stress test
         ldx #$00
         jsr wait_for_nmi
@@ -290,7 +298,7 @@ loop:
 gameloop:
         inc fx_offset
         lda fx_offset
-        cmp #128
+        cmp #192
         bne no_wrap
         lda #0
         sta fx_offset
@@ -511,6 +519,10 @@ return_from_indirect:
         mmc3_select_bank $0, #$00
 
         jsr setup_irq_for_frame
+
+        ; do a thing
+        cli
+        jsr bhop_play
 
         ; restore registers
         pla
