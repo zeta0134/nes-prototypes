@@ -75,7 +75,7 @@ continue:
         sta MMC3_IRQ_DISABLE
 
         ; enable interrupts; the first one shall occur after 8 scanlines
-        lda #(32 - 1)
+        lda #(64 - 1)
         sta MMC3_IRQ_LATCH
         sta MMC3_IRQ_RELOAD
         sta MMC3_IRQ_ENABLE

@@ -339,7 +339,7 @@ cleanup:
         sta irq_table_scroll_x, x
         lda base_y
         clc
-        adc #176
+        adc #160
         sta irq_table_scroll_y, x
 
         ; ppumask: for debugging, make it normal

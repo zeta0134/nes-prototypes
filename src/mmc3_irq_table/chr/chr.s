@@ -2,7 +2,7 @@
 
         .segment "CHR0"
         .align $800
-        .incbin "nes-tiles.chr"
+        .incbin "guardian_battle_tiles.chr"
 
         .segment "CHR1"
         .align $800

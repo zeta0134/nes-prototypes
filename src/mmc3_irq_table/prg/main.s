@@ -44,6 +44,11 @@ circles_palette:
 no3_nametable:
         .incbin "no3_starburst_2.nam"
 
+guardian_battle_nametable:
+        .incbin "guardian_battle.nam"
+guardian_battle_palette:
+        .incbin "guardian-battle.pal"
+
 no3_palette_raw:
         .repeat 2
         ;.byte $07, $07, $07, $17, $17, $27, $37, $27, $17, $17, $07
@@ -70,14 +75,14 @@ no3_palette_raw:
 
 no3_effect:
         .word no3_nametable
-        .word test_palette ; overwritten immediately
+        .word guardian_battle_palette ; mostly overwritten immediately
         .word cycle_raw_no3_palette
         .word generate_y_distortion
         .word sine_64x_16s_pattern
         .word sine_64x_16s_scanlines
         .byte SINE_64X_16S_ENTRIES
         .byte 0, 1 ; init camera x, nametable
-        .byte 32 ; init camera y
+        .byte 64 ; init camera y
         .byte 0 ; scroll amount x
         .byte 0 ; scroll amount y
         .byte $06 ; chr bank
@@ -246,7 +251,7 @@ loop:
         jsr initialize_mmc3
         jsr init_oam
 
-        st16 ptr, test_nametable
+        st16 ptr, guardian_battle_nametable
         set_ppuaddr #$2000
         jsr load_nametable
 
@@ -369,7 +374,7 @@ no_wrap:
         lda inactive_irq_index
         sta irq_generation_index
 
-        lda #176
+        lda #96
         sta pixels_to_generate
 
         ; initialize scroll registers
@@ -474,7 +479,7 @@ no_camera_wrap:
 
         lda #$00
         sta base_nametable
-        lda #32
+        lda #0
         sta base_y
 
         jsr generate_final_entry
