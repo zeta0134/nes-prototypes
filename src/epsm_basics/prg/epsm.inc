@@ -42,9 +42,11 @@ EPSM_SSG_ENVELOPE_ATTACK    = %00000100
 EPSM_SSG_ENVELOPE_ALTERNATE = %00000010
 EPSM_SSG_ENVELOPE_HOLD      = %00000001
 
-.import epsm_command_buffer
-.importzp epsm_command_index
-.import epsm_init, epsm_write_commands
+.import epsm_low_command_buffer
+.import epsm_high_command_buffer
+.importzp epsm_low_command_index
+.importzp epsm_high_command_index
+.import epsm_init, epsm_write_commands_4016, epsm_write_commands_401x
 
 ; 8 cycles when branch taken, 12 cycles when not, ONLY
 ; when addr is on the zero page
@@ -59,22 +61,35 @@ no_carry:
 .endscope
 .endmacro
 
-; Note: A0 registers only for the moment
 ; clobbers: a, y
-.macro epsm_queue_command register, value
+.macro epsm_queue_low_command register, value
 .scope
     ldy #0
     lda register
-    sta (epsm_command_index), y
-    cc_inc16 epsm_command_index
+    sta (epsm_low_command_index), y
+    cc_inc16 epsm_low_command_index
     lda value
-    sta (epsm_command_index), y
-    cc_inc16 epsm_command_index
+    sta (epsm_low_command_index), y
+    cc_inc16 epsm_low_command_index
 .endscope
 .endmacro
 
-.macro epsm_finalize_buffer
+; clobbers: a, y
+.macro epsm_queue_high_command register, value
+.scope
+    ldy #0
+    lda register
+    sta (epsm_high_command_index), y
+    cc_inc16 epsm_high_command_index
+    lda value
+    sta (epsm_high_command_index), y
+    cc_inc16 epsm_high_command_index
+.endscope
+.endmacro
+
+.macro epsm_finalize_buffers
     ldy #0
     lda #$FF
-    sta (epsm_command_index), y
+    sta (epsm_low_command_index), y
+    sta (epsm_high_command_index), y
 .endmacro
