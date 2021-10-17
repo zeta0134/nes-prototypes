@@ -51,7 +51,7 @@ nmi_counter: .byte $00
 
 .proc delayloop
         ; wait one frame? sure, why not
-        epsm_finalize_buffers
+        ; epsm_finalize_buffers
         jsr wait_for_nmi
         ; now the previous buffer has been processed, so clear out those commands
         jsr epsm_init
@@ -62,11 +62,11 @@ nmi_counter: .byte $00
         .include "../vgm/four_note_test.asm"
 main_loop:
         ; clean out the last command buffer and wait for it to process
-        epsm_finalize_buffers
+        ; epsm_finalize_buffers
         jsr wait_for_nmi
         ; now empty the buffer and exit
         jsr epsm_init
-        epsm_finalize_buffers
+        ;epsm_finalize_buffers
         rts
 .endproc
 
@@ -78,7 +78,7 @@ main_loop:
         epsm_queue_low_command #EPSM_SSG_B_PERIOD_HIGH, #$00
         epsm_queue_low_command #EPSM_SSG_B_VOLUME, #$0F
         epsm_queue_low_command #EPSM_SSG_CHANNEL_CONTROL, #$38 ; enable tone, but not noise
-        epsm_finalize_buffers
+        ;epsm_finalize_buffers
         rts
 .endproc
 
@@ -91,7 +91,7 @@ main_loop:
 
         ; before we enable NMI, empty out both EPSM command buffers
         jsr epsm_init
-        epsm_finalize_buffers
+        ;epsm_finalize_buffers
 
         ; re-enable graphics
         lda #$1E

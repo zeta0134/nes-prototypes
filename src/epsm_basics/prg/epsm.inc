@@ -42,11 +42,12 @@ EPSM_SSG_ENVELOPE_ATTACK    = %00000100
 EPSM_SSG_ENVELOPE_ALTERNATE = %00000010
 EPSM_SSG_ENVELOPE_HOLD      = %00000001
 
-.import epsm_low_command_buffer
-.import epsm_high_command_buffer
-.importzp epsm_low_command_index
-.importzp epsm_high_command_index
-.import epsm_init, epsm_write_commands_4016, epsm_write_commands_401x
+.import epsm_reg_low_buffer
+.import epsm_reg_high_buffer
+.import epsm_data_low_buffer
+.import epsm_data_high_buffer
+.importzp epsm_command_index
+.import epsm_init, epsm_write_commands_4016
 
 ; 8 cycles when branch taken, 12 cycles when not, ONLY
 ; when addr is on the zero page
@@ -62,34 +63,73 @@ no_carry:
 .endmacro
 
 ; clobbers: a, y
+; TODO: write an optimized variant for immediate register, value,
+; which can precompute the bit manipulation and save 6502 cycles
 .macro epsm_queue_low_command register, value
 .scope
-    ldy #0
+    ldy epsm_command_index
     lda register
-    sta (epsm_low_command_index), y
-    cc_inc16 epsm_low_command_index
+    ; isolate the high nybble, and add in the latch flags
+    and #$F0 
+    ora #(EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_LOW)
+    sta epsm_reg_high_buffer, y
+    ; shift the low nybble into place
+    lda register
+    asl
+    asl
+    asl
+    asl
+    sta epsm_reg_low_buffer, y
+    ; do the same for data
+    ldy epsm_command_index
     lda value
-    sta (epsm_low_command_index), y
-    cc_inc16 epsm_low_command_index
+    ; isolate the high nybble, and add in the latch flags
+    and #$F0 
+    ora #(EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_LOW)
+    sta epsm_data_high_buffer, y
+    ; shift the low nybble into place
+    lda value
+    asl
+    asl
+    asl
+    asl
+    sta epsm_data_low_buffer, y
+    inc epsm_command_index
 .endscope
 .endmacro
 
 ; clobbers: a, y
+; TODO: write an optimized variant for immediate register, value,
+; which can precompute the bit manipulation and save 6502 cycles
 .macro epsm_queue_high_command register, value
 .scope
-    ldy #0
+    ldy epsm_command_index
     lda register
-    sta (epsm_high_command_index), y
-    cc_inc16 epsm_high_command_index
+    ; isolate the high nybble, and add in the latch flags
+    and #$F0 
+    ora #(EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_HIGH)
+    sta epsm_reg_high_buffer, y
+    ; shift the low nybble into place
+    lda register
+    asl
+    asl
+    asl
+    asl
+    sta epsm_reg_low_buffer, y
+    ; do the same for data
+    ldy epsm_command_index
     lda value
-    sta (epsm_high_command_index), y
-    cc_inc16 epsm_high_command_index
+    ; isolate the high nybble, and add in the latch flags
+    and #$F0 
+    ora #(EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_HIGH)
+    sta epsm_data_high_buffer, y
+    ; shift the low nybble into place
+    lda value
+    asl
+    asl
+    asl
+    asl
+    sta epsm_data_low_buffer, y
+    inc epsm_command_index
 .endscope
-.endmacro
-
-.macro epsm_finalize_buffers
-    ldy #0
-    lda #$FF
-    sta (epsm_low_command_index), y
-    sta (epsm_high_command_index), y
 .endmacro
