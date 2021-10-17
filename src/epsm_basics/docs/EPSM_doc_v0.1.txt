@@ -1,0 +1,350 @@
+Doc version 0.1
+By yoey.nsf
+
+Special Thanks:
+	Perkka
+	Lockster
+	Lidnariq
+
+Write-up for the NES YM2608/YMF288 Expansion Port Sound Module (EPSM). This document serves to outline 
+how to use the EPSM; as well as provide better information on the YM2608, due to the 
+manual being used (as of December 2020) having confusingly translated text (JP -> ENG)
+
+The manual can be found here, and contains helpful diagrams:
+http://www.nemesis.hacking-cult.org/MegaDrive/Documentation/YM2608J%20Translated.PDF
+ 
+Some excerpts taken from the NESdev wiki, notably the Sunsoft 5B registers (SSG is the same)
+
+            $C000/$401C, $E000/$401D (A1 = 0)         $C002/$401E, $E002/$401F (A1 = 1)
+            ---------------------                     ---------------------
+$00 - $0F   |   SSG             |	    $00 - $10 |   ADPCM*          |
+            ---------------------       	      ---------------------
+$10 - $1F   |   Rhythm          |       	      |                   |
+            ---------------------                     ---------------------
+$20 - $2F   |   Common FM       |           	      |                   |
+            ---------------------           	      ---------------------
+$30 - $B6   |   FM Ch 1 - 3     |           	      |   FM Ch 4 - 6     |
+            ---------------------           	      ---------------------
+* Not Present on the YMF288/EPSM
+
+------------------------------------------------------------------------------------------
+EPSM contains two types of addressing. 
+	- cart EXP pins, which is easiest, but requires a cart that routes signals to the EXP port.
+	
+	- $4016 OUT1, which exists as a compromise for EPSM users that would like to use a 
+          discrete mapper that watches the whole cart space for writes, but do not have the 
+          EPSM variant with $401x addressing, OR people who don't have carts that route signals to
+	  the EXP port.
+
+Cart EXP addressing
+	Audio Register Select $C000/$401C (A1 = 0), $C002/$401E (A1 = 1)
+		7......0
+		RRRRRRRR
+		++++++++- The 8-bit internal register to select for use with $E00x
+
+	Audio Register Write $E000/$401D (A1 = 0), $E002/$401F (A1 = 1)
+		7......0
+		VVVVVVVV
+		++++++++- The 8-bit value to write to the internal register selected with $C00x
+
+$4016 Adressing
+	uses the $4016 OUT1 latch on the NES and Famicom Expansion ports as a clock for 
+	data transfer. Latches on writes to $4016.
+  
+	  Rising Edge:
+		7......0
+		hhhhAT..
+		|||||+--- Transfer type (0 = Register, 1 = Data)
+		||||+---- A1 Status (0 = A1 is 0, 1 = A1 is 1)
+		++++----- High nibble of data
+
+	  Falling Edge:
+		7......0
+		llll....
+		++++----- Low nibble of data
+	
+	It is important to keep in mind that OUT1 ONLY latches on every OTHER CPU cycle, so it needs
+	to stay in sync. 
+___________________________________________________________________________________________
+SSG ---------------------------------------------------------------------------------------   
+
+Register	Bitfield	Description
+$00     	LLLL LLLL	Channel A low period
+$01	        ---- HHHH	Channel A high period
+$02     	LLLL LLLL	Channel B low period
+$03	        ---- HHHH	Channel B high period
+$04	        LLLL LLLL	Channel C low period
+$05     	---- HHHH	Channel C high period
+$06     	---P PPPP	Noise period
+$07     	--CB Acba	Noise disable on channels C/B/A, Tone disable on channels c/b/a
+$08     	---E VVVV	Channel A envelope enable (E), volume (V)
+$09     	---E VVVV	Channel B envelope enable (E), volume (V)
+$0A     	---E VVVV	Channel C envelope enable (E), volume (V)
+$0B     	LLLL LLLL	Envelope low period
+$0C     	HHHH HHHH	Envelope high period
+$0D     	---- CAaH	Envelope reset and shape: continue (C), attack (A), alternate (a), hold (H)
+$0E	        ---- ----	I/O port A (Unused)
+$0F	        ---- ----	I/O port B (Unused) 
+
+__________________________________________________________________________________________
+Rhythm -----------------------------------------------------------------------------------
+
+Register    Bitfield    Description
+$10         d-kk kkkk   Dump (d), Rhythm Key On/Off (k) 
+                        10.0: Bass Drum 
+                        10.1: Snare Drum
+                        10.2: Top Cymbal
+                        10.3: Hi-Hat
+                        10.4: Tom
+                        10.5: Rim Shot
+
+$11         --ll llll   Rhythm Total Level (l) 
+$12         tttt tttt   LSI Test Data
+--
+$18         LR-l llll   Bass Drum | Output Select Left (L), Right (R), Instrument Level (l) 
+$19         LR-l llll   Snare Drum
+$1A         LR-l llll   Top Cymbal
+$1B         LR-l llll   Hi-Hat
+$1C         LR-l llll   Tom 
+$1D         LR-l llll   Rim Shot
+
+__________________________________________________________________________________________
+FM ---------------------------------------------------------------------------------------
+
+Register    Bitfield    Description
+
+$21         tttt tttt   LSI Test Data
+--
+$24         HHHH HHHH   Timer-A Hi Value 
+$25         ---- --LL   Timer-A Lo Value 
+$26         BBBB BBBB   Timer-B Value 
+--
+$27         mmBA BABA   Channel 3 mode (mm), Timer B (B), Timer A (A)
+                        	27.1-2 Timer Run
+                        	27.3-4 Timer IRQ Enable 
+                        	27.5-6 Timer IRQ Acknowledge
+$28         kkkk -ccc   Key On/Off (k), Channel (c) 
+				28.4 Operator 1
+				28.5 Operator 2
+				28.6 Operator 3
+				28.7 Operator 4
+$29         m--i iiii   Mode (m), IRQ Enable (i) 
+				Operation Mode (0 = CH1-CH3, OPN Mode | 1 = 6 Channel, OPNA mode) 
+
+---------------------------- PHASE GENERATOR PARAMETERS -------------------------------
+Register    Bitfield    Description
+
+$30         -ddd ffff   Detune (d), Frequency Ratio (f)             CH 1/4 Operator 1
+$34                                                                 CH 1/4 Operator 3
+$38                                                                 CH 1/4 Operator 2
+$3C                                                                 CH 1/4 Operator 4
+--
+$31                                                                 CH 2/5 Operator 1
+$35                                                                 CH 2/5 Operator 3
+$39                                                                 CH 2/5 Operator 2
+$3D                                                                 CH 2/5 Operator 4
+--
+$32                                                                 CH 3/6 Operator 1
+$36                                                                 CH 3/6 Operator 3
+$3A                                                                 CH 3/6 Operator 2
+$3E                                                                 CH 3/6 Operator 4
+--
+$A0         pppp pppp   Low Period (p)                              CH 1/4 
+$A1                                                                 CH 2/5
+$A2                                                                 CH 3/6
+--    
+$A4         --OO Oppp   Octave (O), High Period (p)                 CH 1/4	(Octave = Block)
+$A5                                                                 CH 2/5
+$A6                                                                 CH 3/6
+--
+$A8         pppp pppp   3 CH * Low Period (p) - 3 Ch-3 slot         CH 1/4	(This is for when you break channel 3 down to a couple 2-op channels)
+$A9                                                                 CH 2/5
+$AA                                                                 CH 3/6
+--
+$AC         --OO Oppp   3 CH * Octave (O), 3 CH * High Period (p)   CH 1/4
+$AD                                                                 CH 2/5
+$AF                                                                 CH 3/6
+
+---------------------------- ENVELOPE GENERATOR PARAMETERS ----------------------------
+Register    Bitfield    Description
+$40         -lll llll   Output Level (l)                            CH 1/4 Operator 1
+$44                                                                 CH 1/4 Operator 3
+$48                                                                 CH 1/4 Operator 2
+$4C                                                                 CH 1/4 Operator 4
+--
+$41                                                                 CH 2/5 Operator 1
+$45                                                                 CH 2/5 Operator 3
+$49                                                                 CH 2/5 Operator 2
+$4D                                                                 CH 2/5 Operator 4
+--
+$42                                                                 CH 3/6 Operator 1
+$46                                                                 CH 3/6 Operator 3
+$4A                                                                 CH 3/6 Operator 2
+$4E                                                                 CH 3/6 Operator 4
+
+--
+
+$50         ss-a aaaa   Key Scale (s), Attack Rate (a)              CH 1/4 Operator 1
+$54                                                                 CH 1/4 Operator 3
+$58                                                                 CH 1/4 Operator 2
+$5C                                                                 CH 1/4 Operator 4
+--
+$51                                                                 CH 2/5 Operator 1
+$55                                                                 CH 2/5 Operator 3
+$59                                                                 CH 2/5 Operator 2
+$5D                                                                 CH 2/5 Operator 4
+--
+$52                                                                 CH 3/6 Operator 1
+$56                                                                 CH 3/6 Operator 3
+$5A                                                                 CH 3/6 Operator 2
+$5E                                                                 CH 3/6 Operator 4
+
+--
+
+$60         a--d dddd   AMON (a), Decay Rate (d)                    CH 1/4 Operator 1
+$64                                                                 CH 1/4 Operator 3
+$68                                                                 CH 1/4 Operator 2
+$6C                                                                 CH 1/4 Operator 4
+--
+$61                                                                 CH 2/5 Operator 1
+$65                                                                 CH 2/5 Operator 3
+$69                                                                 CH 2/5 Operator 2
+$6D                                                                 CH 2/5 Operator 4
+--
+$62                                                                 CH 3/6 Operator 1
+$66                                                                 CH 3/6 Operator 3
+$6A                                                                 CH 3/6 Operator 2
+$6E                                                                 CH 3/6 Operator 4
+
+--
+
+$70         ---s ssss   Sustain Rate (s)                            CH 1/4 Operator 1
+$74                                                                 CH 1/4 Operator 3
+$78                                                                 CH 1/4 Operator 2
+$7C                                                                 CH 1/4 Operator 4
+--
+$71                                                                 CH 2/5 Operator 0
+$75                                                                 CH 2/5 Operator 1
+$79                                                                 CH 2/5 Operator 2
+$7D                                                                 CH 2/5 Operator 3
+--
+$72                                                                 CH 3/6 Operator 1
+$76                                                                 CH 3/6 Operator 3
+$7A                                                                 CH 3/6 Operator 2
+$7E                                                                 CH 3/6 Operator 4
+
+--
+
+$80         ssss rrrr   Sustain Level (s), Release Rate (r)         CH 1/4 Operator 1
+$84                                                                 CH 1/4 Operator 3
+$88                                                                 CH 1/4 Operator 2
+$8C                                                                 CH 1/4 Operator 4
+--
+$81                                                                 CH 2/5 Operator 1
+$85                                                                 CH 2/5 Operator 3
+$89                                                                 CH 2/5 Operator 2
+$8D                                                                 CH 2/5 Operator 4
+--
+$82                                                                 CH 3/6 Operator 1
+$86                                                                 CH 3/6 Operator 3
+$8A                                                                 CH 3/6 Operator 2
+$8E                                                                 CH 3/6 Operator 4
+--
+$90         ---- Eeee   SSG Envelope Enable (E), select (e)         CH 1/4 Operator 1
+$94                                                                 CH 1/4 Operator 3
+$98                                                                 CH 1/4 Operator 2
+$9C                                                                 CH 1/4 Operator 4
+--
+$91                                                                 CH 2/5 Operator 1
+$95                                                                 CH 2/5 Operator 3
+$99                                                                 CH 2/5 Operator 2
+$9D                                                                 CH 2/5 Operator 4
+--
+$92                                                                 CH 3/6 Operator 1
+$96                                                                 CH 3/6 Operator 3
+$9A                                                                 CH 3/6 Operator 2
+$9E                                                                 CH 3/6 Operator 4
+
+---------------------------- PARAMETER CONCERNING ALGORITHM ---------------------------
+Register    Bitfield    Description
+$B0         --ff fAAA   Feedback (f), Operator Algorithm (A)        CH 1/4
+$B1                                                                 CH 2/5
+$B2                                                                 CH 3/6
+---------------------------- LFO PARAMETERS -------------------------------------------
+Register    Bitfield    Description
+$22         ---- Errr   LFO Enable (E), LFO Oscillation Rate (r)
+$B4         LRaa -PPP   Left (L), Right (R), AMS (a), PMS (P)       CH 1/4
+$B5                                                                 CH 2/5
+$B6                                                                 CH 3/6
+________________________________________________________________________________________________
+The OPNA/3 requires waiting periods in between certain operations. The waiting cycles are 
+relative to the NTSC 2A03's clock, assuming the EPSM is running at 3.56MHz
+
+After Writing Address 
+
+	Part        Address     Waiting Time
+	FM          $21-$B6     9 cycles
+	SSG         $00-$0F     0 cycles
+	Rhythm      $10-$1D     9 cycles
+
+After Writing Data 
+
+	Part        Address     Waiting Time
+	FM          $21-$9E     42 cycles
+            	    $A0-$B6     24 cycles
+	SSG         $00-$0F     0 cycles
+	Rhythm      $10         288 cycles
+      	    	    $11-$1D     9 cycles
+
+________________________________________________________________________________________________
+REGISTER DETAILS -------------------------------------------------------------------------------
+
+    $21 - $2F:  Values that apply to the 3 channels being accessed (Common Registers)
+			- Stuff like test data isn't applicable in software.
+		$27: Channel 3 mode:
+			D7  D6
+			0   0	Normal. Behaves like any other channel
+			0   1	"CSM Voice Synthesis" mode
+			1   0 	"Effect Sound" mode. Seperate period can be set, plus CSM
+    $30 - $9E:  Each (slot) operator's tone control
+    $A0 - $B6:  Parameter and Frequency information for each channel 
+    $30 - $3C: 	Detune Values:
+			0  1  2  3  4  5  6  7
+			0  1  2  3  0 -1 -2 -3
+		Frequency Ratio Values:
+			0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
+		       1/2 1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+    $50 - $5E: 	Key Scale
+			Changes the rate of the envelope. Higher value = faster; mimicking 
+			changes in tone on real instruments, making the sound more "natural"
+
+________________________________________________________________________________________________
+IRQ/TIMER OPERATION - Assuming EPSM clock is 3.56MHz -------------------------------------------
+	OPNA/3 contains two different timers:
+		- 10-bit Timer A, which runs at 36 NTSC 2A03 cycles per decrement.
+		- 8-bit Timer B, which runs at 576 NTSC 2A03 cycles per decrement.
+
+	To set the timers, you write values to $24-$26 according to these formulas:
+	
+		Timer A:	
+			36*(1024-X) CPU cycles
+		Timer B:
+			576*(256-X) CPU cycles
+	
+	Where X = written value. So, this means that writing 1023 to Timer A results in a timer lasting only
+	36 2A03 cycles, the shortest possible wait time- and writing 0 results in 36,864 cycles,
+	the longest possible wait period. 
+
+	Register $27:
+		mmBA BABA
+		  || ||++- Timer Run 
+		  || ||	        0 = Timer Stop
+		  || ||		1 = Timer Start
+  		  || ++--- Timer IRQ Enable
+		  ||	   	0 = Timer cycles without firing IRQ 
+		  ||	   	1 = Timer overflow fires IRQ
+ 		  ++------ Timer IRQ Acknowledge
+			   	0 = No effect
+			   	1 = Clears IRQ flag
+
+________________________________________________________________________________________________
