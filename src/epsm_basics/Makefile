@@ -18,17 +18,16 @@ O_FILES := \
 all: dir $(ROM_NAME)
 
 dir:
-	@mkdir -p build
+	-@mkdir build
 
 clean:
 	-@rm -rf build
 	-@rm -f $(ROM_NAME)
 	-@rm -f $(DBG_NAME)
 
+# For now, we test in a special build of Mesen with the EPSM expansion
+# emulated, which only works on Windows
 run: dir $(ROM_NAME)
-	#rusticnes-sdl $(ROM_NAME)
-	# For now, we test in a special build of Mesen with the EPSM expansion
-	# emulated, which only works on Windows
 	vendor/MesenEPSM.exe $(ROM_NAME)
 
 $(ROM_NAME): $(SOURCEDIR)/mmc3.cfg $(O_FILES)
