@@ -11,9 +11,16 @@
         .zeropage
 epsm_reg_scratch: .res 1
 epsm_data_scratch: .res 1
+vgm_ptr: .res 2
+vgm_page: .res 1
 
         .segment "RAM"
 nmi_counter: .byte $00
+
+        .segment "VGM"
+        ;.include "../vgm/ponicanyon.asm"
+        .include "../vgm/poni_conv.asm"
+
 
         .segment "PRGLAST_E000"
         .export start, nmi, irq
@@ -82,6 +89,74 @@ main_loop:
         rts
 .endproc
 
+.proc increment_vgm_ptr
+        inc16 vgm_ptr
+        ; if we advanced past the end of the page, we need to 
+        ; swap in the next page and reset the pointer
+        lda vgm_ptr+1
+        cmp #$A0
+        bne done
+        ; flip to the next page of data
+        inc vgm_page
+        mmc3_select_bank $6, vgm_page
+        ; rewind our pointer to $8000
+        lda #$80
+        sta vgm_ptr+1
+        ; (no need to reset the low byte, it should already be $00)
+done:
+        rts
+.endproc
+
+delay_mask: .byte %00000001
+
+; Note: this function is sychronous; it does not return until playback is complete.
+; Later, I'd like to rework it to return when a frame delay is reached, so that it can
+; be called in a more typical game loop.
+.proc play_vgm
+        st16 vgm_ptr, $8000
+        lda #0
+        sta vgm_page
+        mmc3_select_bank $6, vgm_page
+        ldy #0
+        sty epsm_command_index ; clear out the command index entirely
+        ; note: if we lag, the command buffer will be empty. This is by design,
+        ; we don't want to try to play an incompletely written buffer.
+        ldx #0 ; temporary position within the buffer
+playback_loop:
+        lda (vgm_ptr), y
+        ; check: is this a delay command?
+        cmp #$01
+        beq delay_one_frame
+        ; this is indeed a standard command, so queue it up
+        sta epsm_reg_high_buffer, x
+        jsr increment_vgm_ptr
+        lda (vgm_ptr), y
+        sta epsm_reg_low_buffer, x
+        jsr increment_vgm_ptr
+        lda (vgm_ptr), y
+        sta epsm_data_high_buffer, x
+        jsr increment_vgm_ptr 
+        lda (vgm_ptr), y
+        sta epsm_data_low_buffer, x
+        jsr increment_vgm_ptr 
+        inx
+        jmp playback_loop
+delay_one_frame:
+        jsr increment_vgm_ptr
+        stx epsm_command_index
+        jsr wait_for_nmi
+        ldx #0
+        stx epsm_command_index
+        jmp playback_loop
+finished:
+        ; clear out the very last buffer:
+        stx epsm_command_index
+        jsr wait_for_nmi
+        ; now reset and exit to the main loop
+        jsr epsm_init
+        rts
+.endproc
+
 .proc start
         lda #$00
         sta PPUMASK ; disable rendering
@@ -114,8 +189,9 @@ main_loop:
 
 
         jsr epsm_init
-        jsr load_asm
+        ;jsr load_asm
         ;jsr zeta_test
+        jsr play_vgm
 
 gameloop:
         jsr wait_for_nmi
