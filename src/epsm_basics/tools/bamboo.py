@@ -84,6 +84,94 @@ class BambooTrackerModule:
     def __repr__(self):
         return "BambooTrackerModule('%s')" % (self.title)
 
+class InstrumentPropertyType(Enum):
+    FM_ENVELOPE = 0x00
+    FM_LFO = 0x01
+    FM_AL_SEQUENCE = 0x02
+    FM_FB_SEQUENCE = 0x03
+    FM_OP1_AR_SEQUENCE = 0x04
+    FM_OP1_DR_SEQUENCE = 0x05
+    FM_OP1_SR_SEQUENCE = 0x06
+    FM_OP1_RR_SEQUENCE = 0x07
+    FM_OP1_SL_SEQUENCE = 0x08
+    FM_OP1_TL_SEQUENCE = 0x09
+    FM_OP1_KS_SEQUENCE = 0x0A
+    FM_OP1_ML_SEQUENCE = 0x0B
+    FM_OP1_DT_SEQUENCE = 0x0C
+    FM_OP2_AR_SEQUENCE = 0x0D
+    FM_OP2_DR_SEQUENCE = 0x0E
+    FM_OP2_SR_SEQUENCE = 0x0F
+    FM_OP2_RR_SEQUENCE = 0x10
+    FM_OP2_SL_SEQUENCE = 0x11
+    FM_OP2_TL_SEQUENCE = 0x12
+    FM_OP2_KS_SEQUENCE = 0x13
+    FM_OP2_ML_SEQUENCE = 0x14
+    FM_OP2_DT_SEQUENCE = 0x15
+    FM_OP3_AR_SEQUENCE = 0x16
+    FM_OP3_DR_SEQUENCE = 0x17
+    FM_OP3_SR_SEQUENCE = 0x18
+    FM_OP3_RR_SEQUENCE = 0x19
+    FM_OP3_SL_SEQUENCE = 0x1A
+    FM_OP3_TL_SEQUENCE = 0x1B
+    FM_OP3_KS_SEQUENCE = 0x1C
+    FM_OP3_ML_SEQUENCE = 0x1D
+    FM_OP3_DT_SEQUENCE = 0x1E
+    FM_OP4_AR_SEQUENCE = 0x1F
+    FM_OP4_DR_SEQUENCE = 0x20
+    FM_OP4_SR_SEQUENCE = 0x21
+    FM_OP4_RR_SEQUENCE = 0x22
+    FM_OP4_SL_SEQUENCE = 0x23
+    FM_OP4_TL_SEQUENCE = 0x24
+    FM_OP4_KS_SEQUENCE = 0x25
+    FM_OP4_ML_SEQUENCE = 0x26
+    FM_OP4_DT_SEQUENCE = 0x27
+    FM_ARPEGGIO_SEQUENCE = 0x28
+    FM_PITCH_SEQUENCE = 0x29
+    FM_PANNING_SEQUENCE = 0x2A
+    SSG_WAVEFORM_SEQUENCE = 0x30
+    SSG_TONE_NOISE_SEQUENCE = 0x31
+    SSG_ENVELOPE_SEQUENCE = 0x32
+    SSG_ARPEGGIO_SEQUENCE = 0x33
+    SSG_PITCH_SEQUENCE = 0x34
+    ADPCM_SAMPLE = 0x40
+    ADPCM_ENVELOPE_SEQUENCE = 0x41
+    ADPCM_ARPEGGIO_SEQUENCE = 0x42
+    ADPCM_PITCH_SEQUENCE = 0x43
+    ADPCM_PANNING_SEQUENCE = 0x44
+
+# "Part of this complete Envelope(tm)"
+# TODO: ssg_envelope_type should probably be an enum
+class FmOperatorDefinition:
+    def __init__(self, enabled=False, attack_rate=0, key_scale=0, decay_rate=0, detune=0, 
+            sustain_rate=0, sustain_level=0, release_rate=0, total_level=0, multiple=0, ssg_envelope_type=None):
+        self.enabled = enabled
+        self.attack_rate = attack_rate
+        self.key_scale = key_scale
+        self.decay_rate = decay_rate
+        self.detune = detune
+        self.sustain_rate = sustain_rate
+        self.sustain_level = sustain_level
+        self.release_rate = release_rate
+        self.total_level = total_level
+        self.multiple = multiple
+        self.ssg_envelope_type = ssg_envelope_type
+
+    def __repr__(self):
+        return "FmOperator"
+
+# TODO: Algorithm could be an enum if we wanted
+class FmEnvelope:
+    def __init__(self, index=0, algorithm=0, feedback=0, operators=[]):
+        if len(operators) != 4:
+            raise InvalidModule("Incorrect number of operators for FM instrument %s" % (index))
+        self.index = index
+        self.algorithm = algorithm
+        self.feedback = feedback
+        self.operators = operators
+
+    def __repr__(self):
+        return "FmEnvelope(%s)" % self.index    
+
 # This pattern comes up a lot. Useful if we know the next immediate data element
 # in the stream, but not what follows
 def _consume_struct_from(format_string, data_stream):
@@ -236,6 +324,75 @@ def _read_instrument_section(section_contents):
         print("%02x: %s" % (index, instruments[index]))
     return instruments
 
+def _read_fm_operator_definition(section_contents):
+    (enable_ar_byte, section_contents) = _consume_uint8_from(section_contents)
+    enabled = (enable_ar_byte & 0b0010_0000) != 0
+    attack_rate = enable_ar_byte & 0b0001_1111
+    (ks_dr_byte, section_contents) = _consume_uint8_from(section_contents)
+    key_scale = (ks_dr_byte & 0b0110_0000) >> 5
+    decay_rate = ks_dr_byte & 0b0001_1111
+    (dt_sr_byte, section_contents) = _consume_uint8_from(section_contents)
+    detune = (dt_sr_byte & 0b1110_0000) >> 5
+    sustain_rate = dt_sr_byte & 0b0001_1111
+    (sl_rr_byte, section_contents) = _consume_uint8_from(section_contents)
+    sustain_level = (sl_rr_byte & 0b1111_0000) >> 4
+    release_rate = sl_rr_byte & 0b0000_1111
+    (tl_byte, section_contents) = _consume_uint8_from(section_contents)
+    total_level = tl_byte & 0b0111_1111
+    (ssgeg_ml_byte, section_contents) = _consume_uint8_from(section_contents)
+    multiple = ssgeg_ml_byte & 0b0000_1111
+    ssgeg_type_raw = (ssgeg_ml_byte & 0b1111_0000) >> 4
+    ssg_envelope_type = ssgeg_type_raw & 0b0111 if ssgeg_type_raw & 0b1000 != 0 else None
+
+    fm_operator_definition =  FmOperatorDefinition(enabled=enabled, attack_rate=attack_rate, 
+        key_scale=key_scale, decay_rate=decay_rate, detune=detune, sustain_rate=sustain_rate, sustain_level=sustain_level, 
+        release_rate=release_rate, total_level=total_level, ssg_envelope_type=ssg_envelope_type)
+    return (fm_operator_definition, section_contents)
+
+
+def _read_fm_envelopes(block_count, section_contents):
+    print("Will attempt to read %s fm envelopes" % block_count)
+    envelopes = {}
+    for i in range(0, block_count):
+        (index, section_contents) = _consume_uint8_from(section_contents)
+        (offset, section_contents) = _consume_uint8_from(section_contents)
+        (al_fb_byte, section_contents) = _consume_uint8_from(section_contents)
+        feedback = al_fb_byte & 0b0000_1111
+        algorithm = (al_fb_byte & 0b1111_0000) >> 4
+        operators = []
+        for i in range(0, 4):
+            (operator, section_contents) = _read_fm_operator_definition(section_contents)
+            operators.append(operator)
+        envelope = FmEnvelope(index=index, algorithm=algorithm, feedback=feedback, operators=operators)
+        envelopes[index] = envelope
+    return (envelopes, section_contents)
+
+def _read_property_blocks_and_throw_them_away(subsection_type, block_count, section_contents):
+    print("WARNING: Ignoring unsupported section %s with %s blocks" % (subsection_type, block_count))
+    for i in range(0, block_count):
+        (index, section_contents) = _consume_uint8_from(section_contents)
+        (offset, section_contents) = _consume_uint8_from(section_contents)
+        block_length = offset - 1
+        section_contents = section_contents[block_length:len(section_contents)]
+    return section_contents
+
+def _read_instrument_property_section(section_contents):
+    fm_envelopes = {}
+    fm_lfo_configurations = {}
+    sequences = {}
+    while len(section_contents) > 0:
+        (subsection_type_raw, section_contents) = _consume_uint8_from(section_contents)
+        (block_count, section_contents) = _consume_uint8_from(section_contents)
+        subsection_type = InstrumentPropertyType(subsection_type_raw)
+        if subsection_type == InstrumentPropertyType.FM_ENVELOPE:
+            (fm_envelopes, section_contents) = _read_fm_envelopes(block_count, section_contents)
+        else:
+            section_contents = _read_property_blocks_and_throw_them_away(subsection_type, block_count, section_contents)
+    print("Read %s FM Envelopes" % len(fm_envelopes))
+    print("Read %s FM LFO Configurations" % len(fm_lfo_configurations))
+    print("Read %s Sequences" % len(sequences))
+    return (fm_envelopes, fm_lfo_configurations, sequences)
+
 test_filename = "ponicanyon.btm"
 with open(test_filename, 'rb') as module_file:
     raw_data = module_file.read()
@@ -256,5 +413,7 @@ with open(test_filename, 'rb') as module_file:
 
     if sections["INSTRMNT"]:
         module.instruments = _read_instrument_section(sections["INSTRMNT"])
-
+    if sections["INSTPROP"]:
+        print("Beginning instprop read, with len: ", len(sections["INSTPROP"]))
+        (module.fm_envelopes, module.fm_lfo_configurations, module.sequences) = _read_instrument_property_section(sections["INSTPROP"])
 
