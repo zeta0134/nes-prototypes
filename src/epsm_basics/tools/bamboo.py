@@ -1,4 +1,5 @@
 import struct
+import math
 from enum import Enum
 
 class InvalidModule(Exception):
@@ -176,6 +177,139 @@ class Groove:
     def __init__(self, index=0, row_lengths=[]):
         self.index = index
         self.row_lengths = row_lengths
+
+    def __repr__(self):
+        return "Groove(%s)" % self.index
+
+class SongType(Enum):
+    STANDARD = 0x00
+    FM3CH_EXPANDED = 0x01
+
+class StandardTrackType(Enum):
+    FM_1CH = 0x00
+    FM_2CH = 0x01
+    FM_3CH = 0x02
+    FM_4CH = 0x03
+    FM_5CH = 0x04
+    FM_6CH = 0x05
+    SSG_1CH = 0x06
+    SSG_2CH = 0x07
+    SSG_3CH = 0x08
+    RHYTHM_BASS_DRUM = 0x09
+    RHYTHM_SNARE_DRUM = 0x0A
+    RHYTHM_TOP_CYMBAL = 0x0B
+    RHYTHM_HI_HAT = 0x0C
+    RHYTHM_TOM = 0x0D
+    RHYTHM_RIM_SHOT = 0x0E
+    ADPCM = 0x0F
+
+class Fm3chExpandedTrackType(Enum):
+    FM_1CH = 0x00
+    FM_2CH = 0x01
+    FM_3CH_OP1 = 0x02
+    FM_3CH_OP2 = 0x03
+    FM_3CH_OP3 = 0x04
+    FM_3CH_OP4 = 0x05
+    FM_4CH = 0x06
+    FM_5CH = 0x07
+    FM_6CH = 0x08
+    SSG_1CH = 0x09
+    SSG_2CH = 0x0A
+    SSG_3CH = 0x0B
+    RHYTHM_BASS_DRUM = 0x0C
+    RHYTHM_SNARE_DRUM = 0x0D
+    RHYTHM_TOP_CYMBAL = 0x0E
+    RHYTHM_HI_HAT = 0x0F
+    RHYTHM_TOM = 0x10
+    RHYTHM_RIM_SHOT = 0x11
+    ADPCM = 0x12
+
+class Bookmark:
+    def __init__(self, name, order_position, step_position):
+        self.name = name,
+        self.order_position = order_position
+        self.step_position = step_position
+
+    def __repr__(self):
+        return "Bookmark('%s')" % self.name
+
+class KeySignatureType(Enum):
+    C = 0x00
+    C_SHARP = 0x01
+    D_FLAT = 0x02
+    D = 0x03
+    D_SHARP = 0x04
+    E_FLAT = 0x05
+    E = 0x06
+    E_SHARP = 0x07
+    F_FLAT = 0x08
+    F = 0x09
+    F_SHARP = 0x0A
+    G_FLAT = 0x0B
+    G = 0x0C
+    G_SHARP = 0x0D
+    A_FLAT = 0x0E
+    A = 0x0F
+    A_SHARP = 0x10
+    B_FLAT = 0x11
+    B = 0x12
+    # what? Why are these inverted?
+    # ... for that matter, why bother including them?
+    C_FLAT = 0x13
+    B_SHARP = 0x14
+
+class KeySignature:
+    def __init__(self, signature, order_position, step_position):
+        self.signature = signature,
+        self.order_position = order_position
+        self.step_position = step_position
+
+    def __repr__(self):
+        return "KeySignature(%s)" % self.signature
+
+class NoteOn:
+    def __init__(self, note_index):
+        self.note_index = note_index
+
+    def octave(self):
+        return math.floor(self.note_index / 12)
+
+    def note(self):
+        return self.note_index % 12
+
+    def __repr__(self):
+        return "NoteOn(%s%s)" % (note_name(self.note()), self.octave())
+
+class NoteOff:
+    def __repr__(self):
+        return "NoteOff"
+
+class NoteHold:
+    def __repr__(self):
+        return "NoteHold"
+
+class GenericEffect:
+    def __init__(self, effect_id, value=0):
+        self.id = effect_id
+        self.value = value
+
+    def __repr__(self):
+        return "Effect(%s:%02x)" % (self.id, self.value)
+
+class PatternEvent:
+    def __init__(self, note=NoteHold(), instrument=None, volume=None, effects=None):
+        self.note = note
+        self.instrument = instrument
+        self.volume = volume
+        self.effects = effects or {}
+
+    def __repr__(self):
+        return "PatternEvent(%s, I:%s, V:%s, E:%s)" % (self.note, self.instrument, self.volume, self.effects)
+
+# todo: have this respect key signature?
+def note_name(note):
+    c_scale_names = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#",  "B-"]
+    return c_scale_names[note % 12]
 
 # This pattern comes up a lot. Useful if we know the next immediate data element
 # in the stream, but not what follows
@@ -399,10 +533,10 @@ def _read_instrument_property_section(section_contents):
     return (fm_envelopes, fm_lfo_configurations, sequences)
 
 def _read_groove_section(section_contents):
-    (groove_count, section_contents) = _consume_uint8_from(section_contents)
-    # note: groove_count is total sequences - 1, according to spec
+    (groove_count_minus_one, section_contents) = _consume_uint8_from(section_contents)
+    groove_count = groove_count_minus_one + 1
     grooves = {}
-    for i in range(0, groove_count + 1):
+    for i in range(0, groove_count):
         (groove_index, section_contents) = _consume_uint8_from(section_contents)
         (sequence_length, section_contents) = _consume_uint8_from(section_contents)
         groove_sequence = []
@@ -411,6 +545,181 @@ def _read_groove_section(section_contents):
             groove_sequence.append(row_length)
         grooves[groove_index] = Groove(index=groove_index, row_lengths=groove_sequence)
     return grooves
+
+def _read_invisible_tracks(song_contents):
+    (invisible_track_count, song_contents) = _consume_uint8_from(song_contents)
+    invisible_tracks = []
+    for i in range(0, invisible_track_count):
+        (invisible_track_index, song_contents) = _consume_uint8_from(song_contents)
+        invisible_tracks.append(invisible_track_index)
+    return (invisible_tracks, song_contents)
+
+def _read_bookmarks(song_contents):
+    (bookmark_count, song_contents) = _consume_uint8_from(song_contents)
+    bookmarks = []
+    for i in range(0, bookmark_count):
+        (bookmark_name, song_contents) = _consume_pascal_string_from(song_contents)
+        (order_position, song_contents) = _consume_uint8_from(song_contents)
+        (step_position, song_contents) = _consume_uint8_from(song_contents)
+        bookmarks.append(Bookmark(name=bookmark_name, order_position=order_position, step_position=step_position))
+    return (bookmarks, song_contents)
+
+def _read_key_signatures(song_contents):
+    (key_signature_count, song_contents) = _consume_uint8_from(song_contents)
+    key_signatures = []
+    for i in range(0, key_signature_count):
+        (key_signature_raw, song_contents) = _consume_uint8_from(song_contents)
+        (order_position, song_contents) = _consume_uint8_from(song_contents)
+        (step_position, song_contents) = _consume_uint8_from(song_contents)
+        signature_type = KeySignatureType(key_signature_raw)
+        key_signature = KeySignature(signature=signature_type, order_position=order_position, step_position=step_position)
+        print(key_signature)
+        key_signatures.append(key_signature)
+    return (key_signatures, song_contents)
+
+def _read_note(pattern_contents):
+    (note_index, pattern_contents) = _consume_int8_from(pattern_contents)
+    if note_index >= 0:
+        return (NoteOn(note_index), pattern_contents)
+    if note_index == -2:
+        return (NoteOff(), pattern_contents)
+    # TODO: note echo buffer?
+    return (NoteHold(), pattern_contents)
+
+def _read_effect_id(pattern_contents):
+    (effect_id_raw, pattern_contents) =  _consume_struct_from("<2s", pattern_contents)
+    effect_id = effect_id_raw.decode("ascii")
+    return (effect_id, pattern_contents)
+
+def _read_effect_value(pattern_contents):
+    (effect_value, pattern_contents) =  _consume_uint8_from(pattern_contents)
+    return (effect_value, pattern_contents)
+
+# ... this is gross. Clean this up when you get a chance, the bitwise logic is ugly.
+def _read_single_event(pattern_contents):
+    event = PatternEvent()
+    (event_flag, pattern_contents) = _consume_uint16_from(pattern_contents)
+    if (event_flag & 0b0000_0000_0000_0001) != 0:
+        (event.note, pattern_contents) = _read_note(pattern_contents)
+    if (event_flag & 0b0000_0000_0000_0010) != 0:
+        (instrument_index, pattern_contents) = _consume_uint8_from(pattern_contents)
+        event.instrument = instrument_index
+    if (event_flag & 0b0000_0000_0000_0100) != 0:
+        (volume, pattern_contents) = _consume_uint8_from(pattern_contents)
+        event.volume = volume
+    # note: I don't think there can be effects without values, but just to be safe...
+    if (event_flag & 0b0000_0000_0000_1000) != 0:
+        (effect_id, pattern_contents) = _read_effect_id(pattern_contents)
+        event.effects[0] = GenericEffect(effect_id)
+    if (event_flag & 0b0000_0000_0001_0000) != 0:
+        (effect_value, pattern_contents) = _read_effect_value(pattern_contents)
+        if 0 in event.effects:
+            event.effects[0].value = effect_value
+
+    if (event_flag & 0b0000_0000_0010_0000) != 0:
+        (effect_id, pattern_contents) = _read_effect_id(pattern_contents)
+        event.effects[1] = GenericEffect(effect_id)
+    if (event_flag & 0b0000_0000_0100_0000) != 0:
+        (effect_value, pattern_contents) = _read_effect_value(pattern_contents)
+        if 1 in event.effects:
+            event.effects[1].value = effect_value
+
+    if (event_flag & 0b0000_0000_1000_0000) != 0:
+        (effect_id, pattern_contents) = _read_effect_id(pattern_contents)
+        event.effects[2] = GenericEffect(effect_id)
+    if (event_flag & 0b0000_0001_0000_0000) != 0:
+        (effect_value, pattern_contents) = _read_effect_value(pattern_contents)
+        if 2 in event.effects:
+            event.effects[2].value = effect_value
+
+    if (event_flag & 0b0000_0010_0000_0000) != 0:
+        (effect_id, pattern_contents) = _read_effect_id(pattern_contents)
+        event.effects[3] = GenericEffect(effect_id)
+    if (event_flag & 0b0000_0100_0000_0000) != 0:
+        (effect_value, pattern_contents) = _read_effect_value(pattern_contents)
+        if 3 in event.effects:
+            event.effects[3].value = effect_value
+    print(event)
+    return (event, pattern_contents)
+
+def _read_pattern(pattern_contents):
+    events = {}
+    while len(pattern_contents) > 0:
+        (step_index, pattern_contents) = _consume_uint8_from(pattern_contents)
+        (event, pattern_contents) = _read_single_event(pattern_contents)
+        events[step_index] = event
+    return events
+
+def _read_track(track_contents):
+    (order_count_minus_one, track_contents) = _consume_uint8_from(track_contents)
+    order_count = order_count_minus_one + 1
+    pattern_order = []
+    for i in range(0, order_count):
+        (pattern_index, track_contents) = _consume_uint8_from(track_contents)
+        pattern_order.append(pattern_index)
+    print("Pattern order: ", pattern_order)
+    (effect_column_width, track_contents) = _consume_uint8_from(track_contents)
+    # ... documentation unclear! Let's try this:
+    while len(track_contents) > 0:
+        (pattern_index, track_contents) = _consume_uint8_from(track_contents)
+        (offset, track_contents) = _consume_uint32_from(track_contents)
+        pattern_length = offset - 4
+        pattern_contents = track_contents[0:pattern_length]
+        track_contents = track_contents[pattern_length:len(track_contents)]
+        print("Will attempt to read pattern %s with length %s" % (pattern_index, len(pattern_contents)))
+        events = _read_pattern(pattern_contents)
+        print("Got pattern with %s events: ", len(events))
+
+def _read_tracks(song_type, song_contents):
+    track_count = 16 if song_type == SongType.STANDARD else 19
+    print("This is a %s so will attempt to read %s tracks..." % (song_type, track_count))
+    tracks = []
+    for i in range(0, track_count):
+        (track_number, song_contents) = _consume_uint8_from(song_contents)
+        (offset, song_contents) = _consume_uint32_from(song_contents)
+        track_length = offset - 4
+        track_contents = song_contents[0:track_length]
+        song_contents = song_contents[track_length:len(song_contents)]
+        track_type = StandardTrackType(track_number) if song_type == SongType.STANDARD else Fm3chExpandedTrackType(track_number)
+        print("Will attempt to read track %s with length %s" % (track_type, len(track_contents)))
+        tracks.append(_read_track(track_contents))
+    return tracks
+
+def _read_song(song_contents):
+    # song header
+    (title, song_contents) = _consume_pascal_string_from(song_contents)
+    print("Song title: ", title)
+    (tempo, song_contents) = _consume_uint32_from(song_contents)
+    (tempo_groove_flag, song_contents) = _consume_uint8_from(song_contents)
+    (speed, song_contents) = _consume_uint32_from(song_contents)
+    (pattern_size_minus_one, song_contents) = _consume_uint8_from(song_contents)
+    (song_type_byte, song_contents) = _consume_uint8_from(song_contents)
+    groove_enabled = tempo_groove_flag & 0x80 == 0
+    groove_index = tempo_groove_flag & 0x7F
+    song_type = SongType(song_type_byte)
+    # subsections with bonus data (largely unimportant but we need to read it all the same)
+    (invisible_tracks, song_contents) = _read_invisible_tracks(song_contents)
+    print("Invisible tracks: ", len(invisible_tracks))
+    (bookmarks, song_contents) = _read_bookmarks(song_contents)
+    print("Bookmarks: ", len(bookmarks))
+    (key_signatures, song_contents) = _read_key_signatures(song_contents)
+    print("Key Signatures: ", len(key_signatures))
+    # now we read out the tracks, based on the song type
+    tracks = _read_tracks(song_type, song_contents)
+
+def _read_song_section(section_contents):
+    print("Beginning song selection read, with len: ", len(section_contents))
+    (song_count, section_contents) = _consume_uint8_from(section_contents)
+    songs = {}
+    for i in range(0, song_count):
+        (song_index, section_contents) = _consume_uint8_from(section_contents)
+        (offset, section_contents) = _consume_uint32_from(section_contents)
+        song_length = offset - 4
+        song_contents = section_contents[0:song_length]
+        section_contents = section_contents[song_length:len(section_contents)]
+        print("Reading song index %s with length %s..." % (song_index, len(song_contents)))
+        songs[song_index] = _read_song(song_contents)
+    return songs
 
 test_filename = "ponicanyon.btm"
 with open(test_filename, 'rb') as module_file:
@@ -437,4 +746,6 @@ with open(test_filename, 'rb') as module_file:
     if sections["GROOVE  "]:
         module.grooves = _read_groove_section(sections["GROOVE  "])
         print("Read %s Grooves" % len(module.grooves))
+    if sections["SONG    "]:
+        module.songs = _read_song_section(sections["SONG    "])
 
