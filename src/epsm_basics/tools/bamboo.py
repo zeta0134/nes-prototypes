@@ -170,7 +170,12 @@ class FmEnvelope:
         self.operators = operators
 
     def __repr__(self):
-        return "FmEnvelope(%s)" % self.index    
+        return "FmEnvelope(%s)" % self.index
+
+class Groove:
+    def __init__(self, index=0, row_lengths=[]):
+        self.index = index
+        self.row_lengths = row_lengths
 
 # This pattern comes up a lot. Useful if we know the next immediate data element
 # in the stream, but not what follows
@@ -393,6 +398,20 @@ def _read_instrument_property_section(section_contents):
     print("Read %s Sequences" % len(sequences))
     return (fm_envelopes, fm_lfo_configurations, sequences)
 
+def _read_groove_section(section_contents):
+    (groove_count, section_contents) = _consume_uint8_from(section_contents)
+    # note: groove_count is total sequences - 1, according to spec
+    grooves = {}
+    for i in range(0, groove_count + 1):
+        (groove_index, section_contents) = _consume_uint8_from(section_contents)
+        (sequence_length, section_contents) = _consume_uint8_from(section_contents)
+        groove_sequence = []
+        for i in range(0, sequence_length):
+            (row_length, section_contents) = _consume_uint8_from(section_contents)
+            groove_sequence.append(row_length)
+        grooves[groove_index] = Groove(index=groove_index, row_lengths=groove_sequence)
+    return grooves
+
 test_filename = "ponicanyon.btm"
 with open(test_filename, 'rb') as module_file:
     raw_data = module_file.read()
@@ -414,6 +433,8 @@ with open(test_filename, 'rb') as module_file:
     if sections["INSTRMNT"]:
         module.instruments = _read_instrument_section(sections["INSTRMNT"])
     if sections["INSTPROP"]:
-        print("Beginning instprop read, with len: ", len(sections["INSTPROP"]))
         (module.fm_envelopes, module.fm_lfo_configurations, module.sequences) = _read_instrument_property_section(sections["INSTPROP"])
+    if sections["GROOVE  "]:
+        module.grooves = _read_groove_section(sections["GROOVE  "])
+        print("Read %s Grooves" % len(module.grooves))
 
