@@ -21,5 +21,5 @@ SINE_64X_32S_HEIGHT = 128
 SINE_64X_32S_ENTRIES = 56
 .import sine_64x_32s_pattern, sine_64x_32s_scanlines
 UNDERWATER_HEIGHT = 160
-UNDERWATER_ENTRIES = 12
+UNDERWATER_ENTRIES = 13
 .import underwater_pattern, underwater_scanlines
