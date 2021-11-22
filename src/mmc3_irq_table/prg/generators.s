@@ -830,3 +830,33 @@ sine_64x_32s_scanlines:
     .byte 2
 
 .export sine_64x_32s_pattern, sine_64x_32s_scanlines
+
+underwater_pattern:
+  sbyte 0   ;1
+  sbyte 1   ;2
+  sbyte 2   ;3
+  sbyte 3   ;5
+  sbyte 2   ;3
+  sbyte 1   ;2
+  sbyte 0   ;1
+  sbyte -1  ;2
+  sbyte -2  ;3
+  sbyte -3  ;5
+  sbyte -2  ;3
+  sbyte -1  ;2
+
+underwater_scanlines:
+  .byte 5
+  .byte 10
+  .byte 15
+  .byte 25
+  .byte 15
+  .byte 10
+  .byte 5
+  .byte 10
+  .byte 15
+  .byte 25
+  .byte 15
+  .byte 10
+
+.export underwater_pattern, underwater_scanlines

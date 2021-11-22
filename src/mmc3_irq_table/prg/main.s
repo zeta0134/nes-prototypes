@@ -17,6 +17,7 @@ fx_ptr: .word $0000
         .segment "RAM"
 nmi_counter: .byte $00
 fx_offset: .byte $00
+fx_height: .byte $00
 
 camera_x: .word $0000 ; low bit of the high byte encodes the nametable (remaining 7 bits ignored)
 camera_y: .word $0000 ; high byte is useful to resolve 240px wrapping scenarios unambiguously
@@ -53,6 +54,7 @@ no3_palette_raw:
         GeneratorProc .word
         GeneratorPatternPtr .word
         GeneratorScanlinePtr .word
+        GeneratorHeight .byte
         GeneratorLength .byte
         CameraInitX .word
         CameraInitY .byte
@@ -71,6 +73,7 @@ no3_effect:
         .word generate_y_distortion
         .word sine_64x_16s_pattern
         .word sine_64x_16s_scanlines
+        .byte SINE_64X_16S_HEIGHT
         .byte SINE_64X_16S_ENTRIES
         .byte 0, 1 ; init camera x, nametable
         .byte 32 ; init camera y
@@ -86,6 +89,7 @@ drippy_circles:
         .word generate_y_distortion
         .word sine_64x_32s_pattern
         .word sine_64x_32s_scanlines
+        .byte SINE_64X_32S_HEIGHT
         .byte SINE_64X_32S_ENTRIES
         .byte 0, 1 ; init camera x, nametable
         .byte 32 ; init camera y
@@ -101,7 +105,24 @@ interleaved_nes:
         .word generate_x_distortion
         .word interleaved_sine_pattern
         .word interleaved_sine_scanlines
+        .byte 128
         .byte INTERLEAVED_SINE_LENGTH
+        .byte 0, 0 ; init camera x, nametable
+        .byte 32 ; init camera y
+        .byte 0 ; scroll amount x
+        .byte 0 ; scroll amount y
+        .byte $00 ; chr bank
+        .byte ($1E | TINT_B) ; ppumask
+
+underwater_nes:
+        .word test_nametable
+        .word test_palette ; overwritten immediately
+        .word do_nothing
+        .word generate_y_distortion
+        .word underwater_pattern
+        .word underwater_scanlines
+        .byte UNDERWATER_HEIGHT
+        .byte UNDERWATER_ENTRIES
         .byte 0, 0 ; init camera x, nametable
         .byte 32 ; init camera y
         .byte 0 ; scroll amount x
@@ -256,8 +277,9 @@ loop:
 
         ; pick an effect
         ;st16 fx_ptr, no3_effect
-        st16 fx_ptr, drippy_circles
+        ;st16 fx_ptr, drippy_circles
         ;st16 fx_ptr, interleaved_nes
+        st16 fx_ptr, underwater_nes
 
         ; initialize the effect
         jsr init_effect
@@ -290,7 +312,7 @@ loop:
 gameloop:
         inc fx_offset
         lda fx_offset
-        cmp #128
+        cmp fx_height
         bne no_wrap
         lda #0
         sta fx_offset
@@ -343,6 +365,10 @@ no_wrap:
         ldy #EffectData::CameraInitY
         lda (fx_ptr), y
         sta camera_y
+
+        ldy #EffectData::GeneratorHeight
+        lda (fx_ptr), y
+        sta fx_height       
 
         ; reset various tracking counters
         lda #0
