@@ -1,9 +1,6 @@
 from enum import IntEnum
 import bamboo
 
-# ugly debug code
-# make less ugly later, when it works
-
 # Style note: bytecode values in hex please. 
 # Even if a bytecode function returns just one byte, make
 #   it a list. Be consistent!
@@ -94,23 +91,23 @@ def instrument_bytecode(instrument_index):
 		]
 
 # Note: Currently does not attempt to work out global row duration
-def compile_pattern(pattern_events):
+def compile_pattern(pattern):
 	last_step_index = None
 	last_instrument = None
 	last_volume = None
 	compiled_bytecode = []
 
-	for step_index, event in pattern_events.items():
+	for step_index, event in pattern.events.items():
 		# write out the duration for the *previous* row
 		if last_step_index != None:
 			duration = step_index - last_step_index
-			compiled_bytecode.append(duration)
+			compiled_bytecode.append(duration - 1)
 		else:
 			# special case: if the first pattern row is not 0 in our source data,
 			# then we need to lead with a note hold
 			if step_index != 0:
-				compiled_bytecode.extend(note_bytecode(bamboo.NoteHold))
-				compiled_bytecode.append(step_index)
+				compiled_bytecode.extend(note_bytecode(bamboo.NoteHold()))
+				compiled_bytecode.append(step_index - 1)
 		last_step_index = step_index
 
 		# write out the basic data for the *current* row
@@ -127,11 +124,23 @@ def compile_pattern(pattern_events):
 	compiled_bytecode.append(0xFF)
 	return compiled_bytecode
 
+def pattern_label(song_index, track_index, pattern_index):
+	channel_type = bamboo.StandardTrackType(track_index)
+	return f"btm_song{song_index}_{channel_type.name.lower()}_pattern{pattern_index}"
+
+def frame_header(song_index):
+	return f"btm_song{song_index}_frames"
+
+def frame_label(song_index, frame_index):
+	return f"btm_song{song_index}_frame{frame_index}"
+
+# Ugly debug code to follow! Clean this up, eventually
+
 def ca65_byte_literal(value):
   return "$%02x" % (value & 0xFF)
 
-def pretty_print_table(table_name, raw_bytes):
-  """ Formats a list of byte strings, 8 per line
+def pretty_print_table(table_name, raw_bytes, width=16):
+  """ Formats a list of byte strings, 16 per line
 
   Just for style purposes, I'd like to collapse the table so that 
   only 8 bytes are printed on each line. This is nicer than one 
@@ -139,14 +148,50 @@ def pretty_print_table(table_name, raw_bytes):
   """
   formatted_bytes = [ca65_byte_literal(byte) for byte in raw_bytes]
   print("%s:" % table_name)
-  for table_row in range(0, int(len(formatted_bytes) / 8)):
-    row_text = ", ".join(formatted_bytes[table_row * 8 : table_row * 8 + 8])
+  for table_row in range(0, int(len(formatted_bytes) / width)):
+    row_text = ", ".join(formatted_bytes[table_row * width : table_row * width + width])
     print("  .byte %s" % row_text)
 
-  final_row_text = ", ".join(formatted_bytes[int(len(formatted_bytes) / 8) * 8 : ])
+  final_row_text = ", ".join(formatted_bytes[int(len(formatted_bytes) / width) * width : ])
   print("  .byte %s" % final_row_text)
 
+def print_patterns(module):
+	for song_index in range(0, len(module.songs)):
+		song = module.songs[song_index]
+		for track_index in range(0, len(song.tracks)):
+			track = song.tracks[track_index]
+			for pattern_index in range(0, len(track.patterns)):
+				pattern = track.patterns[pattern_index]
+				bytecode = compile_pattern(pattern)
+				label = pattern_label(song_index, track_index, pattern_index)
+				pretty_print_table(label, bytecode)
+
+
+def print_frames(module):
+	for song_index in range(0, len(module.songs)):
+		song = module.songs[song_index]
+		print("%s:" % frame_header(song_index))
+
+		# First print the frame labels themselves:
+		for frame_index in range(0, len(song.tracks[0].pattern_order)):
+			print("  .word %s" % frame_label(song_index, frame_index))
+
+		# Now print the pattern labels for each frame
+
+		# note: possibly flawed assumption: every track shares the length of
+		# pattern order? Gosh I really hope this holds, because the data format
+		# doesn't specify it...
+		for frame_index in range(0, len(song.tracks[0].pattern_order)):
+			print("%s:" % frame_label(song_index, frame_index))
+			for track_index in range(0, len(song.tracks)):
+				track = song.tracks[track_index]
+				pattern_index = track.pattern_order[frame_index]
+				label = pattern_label(song_index, track_index, pattern_index)
+				print("  .word %s" % label)
+
+
+
 module = bamboo.read_module("ponicanyon.btm")
-print(module.songs[0].tracks[0].patterns[0].events)
-test_pattern_bytecode = compile_pattern(module.songs[0].tracks[0].patterns[0].events)
-pretty_print_table("test_pattern", test_pattern_bytecode)
+
+print_frames(module)
+print_patterns(module)

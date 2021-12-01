@@ -492,8 +492,6 @@ def _read_instrument_section(section_contents):
         instrument_contents = section_contents[0:instrument_length]
         section_contents = section_contents[instrument_length:len(section_contents)]
         instruments[instrument_index] = _read_instrument(instrument_contents)
-    for index in instruments:
-        print("%02x: %s" % (index, instruments[index]))
     return instruments
 
 def _read_fm_operator_definition(section_contents):
@@ -523,7 +521,6 @@ def _read_fm_operator_definition(section_contents):
 
 
 def _read_fm_envelopes(block_count, section_contents):
-    print("Will attempt to read %s fm envelopes" % block_count)
     envelopes = {}
     for i in range(0, block_count):
         (index, section_contents) = _consume_uint8_from(section_contents)
@@ -540,7 +537,8 @@ def _read_fm_envelopes(block_count, section_contents):
     return (envelopes, section_contents)
 
 def _read_property_blocks_and_throw_them_away(subsection_type, block_count, section_contents):
-    print("WARNING: Ignoring unsupported section %s with %s blocks" % (subsection_type, block_count))
+    # TODO: implement these, don't yell about them
+    #print("WARNING: Ignoring unsupported section %s with %s blocks" % (subsection_type, block_count))
     for i in range(0, block_count):
         (index, section_contents) = _consume_uint8_from(section_contents)
         (offset, section_contents) = _consume_uint8_from(section_contents)
@@ -560,9 +558,6 @@ def _read_instrument_property_section(section_contents):
             (fm_envelopes, section_contents) = _read_fm_envelopes(block_count, section_contents)
         else:
             section_contents = _read_property_blocks_and_throw_them_away(subsection_type, block_count, section_contents)
-    print("Read %s FM Envelopes" % len(fm_envelopes))
-    print("Read %s FM LFO Configurations" % len(fm_lfo_configurations))
-    print("Read %s Sequences" % len(sequences))
     return (fm_envelopes, fm_lfo_configurations, sequences)
 
 def _read_groove_section(section_contents):
@@ -606,7 +601,6 @@ def _read_key_signatures(song_contents):
         (step_position, song_contents) = _consume_uint8_from(song_contents)
         signature_type = KeySignatureType(key_signature_raw)
         key_signature = KeySignature(signature=signature_type, order_position=order_position, step_position=step_position)
-        print(key_signature)
         key_signatures.append(key_signature)
     return (key_signatures, song_contents)
 
@@ -689,7 +683,6 @@ def _read_track(track_contents):
     for i in range(0, order_count):
         (pattern_index, track_contents) = _consume_uint8_from(track_contents)
         pattern_order.append(pattern_index)
-    print("Pattern order: ", pattern_order)
     (effect_column_width, track_contents) = _consume_uint8_from(track_contents)
     # ... documentation unclear! Let's try this:
     patterns = []
@@ -699,16 +692,13 @@ def _read_track(track_contents):
         pattern_length = offset - 4
         pattern_contents = track_contents[0:pattern_length]
         track_contents = track_contents[pattern_length:len(track_contents)]
-        print("Will attempt to read pattern %s with length %s" % (pattern_index, len(pattern_contents)))
         events = _read_pattern(pattern_contents)
-        print("Got pattern with %s events: ", len(events))
         pattern = Pattern(events=events)
         patterns.append(pattern)
     return Track(pattern_order=pattern_order, patterns=patterns, effect_column_width=effect_column_width)
 
 def _read_tracks(song_type, song_contents):
     track_count = 16 if song_type == SongType.STANDARD else 19
-    print("This is a %s so will attempt to read %s tracks..." % (song_type, track_count))
     tracks = []
     for i in range(0, track_count):
         (track_number, song_contents) = _consume_uint8_from(song_contents)
@@ -717,14 +707,12 @@ def _read_tracks(song_type, song_contents):
         track_contents = song_contents[0:track_length]
         song_contents = song_contents[track_length:len(song_contents)]
         track_type = StandardTrackType(track_number) if song_type == SongType.STANDARD else Fm3chExpandedTrackType(track_number)
-        print("Will attempt to read track %s with length %s" % (track_type, len(track_contents)))
         tracks.append(_read_track(track_contents))
     return tracks
 
 def _read_song(song_contents):
     # song header
     (title, song_contents) = _consume_pascal_string_from(song_contents)
-    print("Song title: ", title)
     (tempo, song_contents) = _consume_uint32_from(song_contents)
     (tempo_groove_flag, song_contents) = _consume_uint8_from(song_contents)
     (speed, song_contents) = _consume_uint32_from(song_contents)
@@ -736,11 +724,8 @@ def _read_song(song_contents):
     pattern_size = pattern_size_minus_one + 1
     # subsections with bonus data (largely unimportant but we need to read it all the same)
     (invisible_tracks, song_contents) = _read_invisible_tracks(song_contents)
-    print("Invisible tracks: ", len(invisible_tracks))
     (bookmarks, song_contents) = _read_bookmarks(song_contents)
-    print("Bookmarks: ", len(bookmarks))
     (key_signatures, song_contents) = _read_key_signatures(song_contents)
-    print("Key Signatures: ", len(key_signatures))
     # now we read out the tracks, based on the song type
     tracks = _read_tracks(song_type, song_contents)
     return Song(
@@ -755,7 +740,6 @@ def _read_song(song_contents):
     )
 
 def _read_song_section(section_contents):
-    print("Beginning song selection read, with len: ", len(section_contents))
     (song_count, section_contents) = _consume_uint8_from(section_contents)
     songs = {}
     for i in range(0, song_count):
@@ -764,7 +748,6 @@ def _read_song_section(section_contents):
         song_length = offset - 4
         song_contents = section_contents[0:song_length]
         section_contents = section_contents[song_length:len(section_contents)]
-        print("Reading song index %s with length %s..." % (song_index, len(song_contents)))
         songs[song_index] = _read_song(song_contents)
     return songs
 
@@ -772,12 +755,10 @@ def read_module(filename):
     with open(filename, 'rb') as module_file:
         raw_data = module_file.read()
         (version_string, module_contents) = _read_header(raw_data)
-        print("BambooTracker Module Version: ", version_string)
         sanity_counter = 0
         sections = {}
         while len(module_contents) > 0 and sanity_counter < 10:
             (section_identifier, section_contents, module_contents) = _read_section(module_contents)
-            print("Read section: %s with length %s" % (section_identifier, len(section_contents)))
             sections[section_identifier] = section_contents
             sanity_counter += 1
         # There should always be a module section, but don't assume anything else is in here
