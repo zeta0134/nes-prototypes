@@ -152,8 +152,10 @@ def pretty_print_table(table_name, raw_bytes, width=16):
     row_text = ", ".join(formatted_bytes[table_row * width : table_row * width + width])
     print("  .byte %s" % row_text)
 
-  final_row_text = ", ".join(formatted_bytes[int(len(formatted_bytes) / width) * width : ])
-  print("  .byte %s" % final_row_text)
+  final_row = formatted_bytes[int(len(formatted_bytes) / width) * width : ]
+  if len(final_row) > 0:
+  	final_row_text = ", ".join(final_row)
+  	print("  .byte %s" % final_row_text)
 
 def print_patterns(module):
 	for song_index in range(0, len(module.songs)):
@@ -186,8 +188,12 @@ def print_frames(module):
 			for track_index in range(0, len(song.tracks)):
 				track = song.tracks[track_index]
 				pattern_index = track.pattern_order[frame_index]
-				label = pattern_label(song_index, track_index, pattern_index)
-				print("  .word %s" % label)
+				# sanity check: does this pattern exist? (it might not!)
+				if pattern_index < len(track.patterns):
+					label = pattern_label(song_index, track_index, pattern_index)
+					print("  .word %s" % label)
+				else:
+					print("  .word unspecified_empty_pattern")
 
 
 
