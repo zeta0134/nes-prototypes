@@ -35,11 +35,23 @@ epsm_data_low_buffer: .res 256
 .endproc
 .export epsm_init
 
+; Note: Mesen uses an awkward combo of YM2612 and separate SSG emulation, and unfortunately
+; the YM2612 requires *far* more delay cycles inbetween register writes, especially at the
+; slower speed. Adjust this to taste. On real hardware this should be unnecessary; the base
+; form of the write loop is plenty sufficient delay between writes on the target YMF288
+
+; Suggested values:
+; 3.57 MHz - rep 7 (14 extra cycles)
+; 8.00 MHz - rep 0 (0 extra cycles)
+.macro mesen_compat_delay
+.repeat 7
+    nop
+.endrepeat
+.endmacro
+
 ; Write commands using 4016 addressing. EVEN/ODD cycle alignment very much matters.
 ; Ideally this is called immediately after sprite OAM DMA, which will ensure the correct
 ; alignment.
-
-; Note: this is broken! Currently debugging.
 
 .proc epsm_write_commands_4016
     ; Assume we start on an EVEN cycle
@@ -63,6 +75,7 @@ command_loop:
     ; data: low nybble
     lda epsm_data_low_buffer, y ; 4
     sta $4016 ; 4
+    mesen_compat_delay
     ; adjust and loop
     iny ; 2 
     cpy z:epsm_command_index ; 3 EVEN
