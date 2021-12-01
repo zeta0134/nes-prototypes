@@ -639,7 +639,6 @@ def _read_single_event(pattern_contents):
         (effect_value, pattern_contents) = _read_effect_value(pattern_contents)
         if 3 in event.effects:
             event.effects[3].value = effect_value
-    print(event)
     return (event, pattern_contents)
 
 def _read_pattern(pattern_contents):
@@ -721,31 +720,31 @@ def _read_song_section(section_contents):
         songs[song_index] = _read_song(song_contents)
     return songs
 
-test_filename = "ponicanyon.btm"
-with open(test_filename, 'rb') as module_file:
-    raw_data = module_file.read()
-    print("Full length: ", len(raw_data))
-    (version_string, module_contents) = _read_header(raw_data)
-    print("BambooTracker Module Version: ", version_string)
-    sanity_counter = 0
-    sections = {}
-    while len(module_contents) > 0 and sanity_counter < 10:
-        (section_identifier, section_contents, module_contents) = _read_section(module_contents)
-        print("Read section: %s with length %s" % (section_identifier, len(section_contents)))
-        sections[section_identifier] = section_contents
-        sanity_counter += 1
-    # There should always be a module section, but don't assume anything else is in here
-    module = _read_module_section(sections["MODULE  "])
-    print(module)
-    print(module.mixer)
+def read_module(filename):
+    with open(filename, 'rb') as module_file:
+        raw_data = module_file.read()
+        (version_string, module_contents) = _read_header(raw_data)
+        print("BambooTracker Module Version: ", version_string)
+        sanity_counter = 0
+        sections = {}
+        while len(module_contents) > 0 and sanity_counter < 10:
+            (section_identifier, section_contents, module_contents) = _read_section(module_contents)
+            print("Read section: %s with length %s" % (section_identifier, len(section_contents)))
+            sections[section_identifier] = section_contents
+            sanity_counter += 1
+        # There should always be a module section, but don't assume anything else is in here
+        module = _read_module_section(sections["MODULE  "])
 
-    if sections["INSTRMNT"]:
-        module.instruments = _read_instrument_section(sections["INSTRMNT"])
-    if sections["INSTPROP"]:
-        (module.fm_envelopes, module.fm_lfo_configurations, module.sequences) = _read_instrument_property_section(sections["INSTPROP"])
-    if sections["GROOVE  "]:
-        module.grooves = _read_groove_section(sections["GROOVE  "])
-        print("Read %s Grooves" % len(module.grooves))
-    if sections["SONG    "]:
-        module.songs = _read_song_section(sections["SONG    "])
+        if sections["INSTRMNT"]:
+            module.instruments = _read_instrument_section(sections["INSTRMNT"])
+        if sections["INSTPROP"]:
+            (module.fm_envelopes, module.fm_lfo_configurations, module.sequences) = _read_instrument_property_section(sections["INSTPROP"])
+        if sections["GROOVE  "]:
+            module.grooves = _read_groove_section(sections["GROOVE  "])
+        if sections["SONG    "]:
+            module.songs = _read_song_section(sections["SONG    "])
+
+    return module
+
+
 
