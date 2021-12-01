@@ -306,6 +306,39 @@ class PatternEvent:
     def __repr__(self):
         return "PatternEvent(%s, I:%s, V:%s, E:%s)" % (self.note, self.instrument, self.volume, self.effects)
 
+class Pattern:
+    def __init__(self, events=None):
+        self.events = events
+
+    def __repr__(self):
+        return "Pattern(%s)" % (len(self.events))
+
+class Track:
+    def __init__(self, pattern_order=None, patterns=None, effect_column_width=1):
+        self.pattern_order = pattern_order or []
+        self.patterns = patterns or []
+        self.effect_column_width = effect_column_width
+
+    def __repr__(self):
+        return "Track(%s)" % (self.pattern_order)
+
+class Song:
+    def __init__(self, title="", song_type=SongType.STANDARD, tempo=None, groove_enabled=False, groove_index=0, speed=None, pattern_size=64, tracks=None):
+        self.title = title
+        self.type = song_type
+        self.tempo = tempo
+        self.speed = speed
+        self.groove_enabled = groove_enabled
+        self.groove_index = groove_index
+        self.pattern_size = pattern_size
+        self.tracks = tracks or []
+
+        # make sure tempo/speed have sane defaults
+        if not self.tempo and not self.groove_enabled:
+            self.tempo = 150
+        if self.tempo and not self.speed:
+            self.speed = 6
+
 # todo: have this respect key signature?
 def note_name(note):
     c_scale_names = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#",  "B-"]
@@ -659,6 +692,7 @@ def _read_track(track_contents):
     print("Pattern order: ", pattern_order)
     (effect_column_width, track_contents) = _consume_uint8_from(track_contents)
     # ... documentation unclear! Let's try this:
+    patterns = []
     while len(track_contents) > 0:
         (pattern_index, track_contents) = _consume_uint8_from(track_contents)
         (offset, track_contents) = _consume_uint32_from(track_contents)
@@ -668,6 +702,9 @@ def _read_track(track_contents):
         print("Will attempt to read pattern %s with length %s" % (pattern_index, len(pattern_contents)))
         events = _read_pattern(pattern_contents)
         print("Got pattern with %s events: ", len(events))
+        pattern = Pattern(events=events)
+        patterns.append(pattern)
+    return Track(pattern_order=pattern_order, patterns=patterns, effect_column_width=effect_column_width)
 
 def _read_tracks(song_type, song_contents):
     track_count = 16 if song_type == SongType.STANDARD else 19
@@ -696,6 +733,7 @@ def _read_song(song_contents):
     groove_enabled = tempo_groove_flag & 0x80 == 0
     groove_index = tempo_groove_flag & 0x7F
     song_type = SongType(song_type_byte)
+    pattern_size = pattern_size_minus_one + 1
     # subsections with bonus data (largely unimportant but we need to read it all the same)
     (invisible_tracks, song_contents) = _read_invisible_tracks(song_contents)
     print("Invisible tracks: ", len(invisible_tracks))
@@ -705,6 +743,16 @@ def _read_song(song_contents):
     print("Key Signatures: ", len(key_signatures))
     # now we read out the tracks, based on the song type
     tracks = _read_tracks(song_type, song_contents)
+    return Song(
+        title=title,
+        song_type=song_type,
+        tempo=tempo,
+        speed=speed,
+        groove_enabled=groove_enabled,
+        groove_index=groove_index,
+        pattern_size=pattern_size,
+        tracks=tracks
+    )
 
 def _read_song_section(section_contents):
     print("Beginning song selection read, with len: ", len(section_contents))
