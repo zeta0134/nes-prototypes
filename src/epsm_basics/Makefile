@@ -28,7 +28,7 @@ clean:
 # For now, we test in a special build of Mesen with the EPSM expansion
 # emulated, which only works on Windows
 run: dir $(ROM_NAME)
-	vendor/MesenEPSM.exe $(ROM_NAME)
+	mono vendor/Mesen-X-v1.0.0.exe $(ROM_NAME)
 
 $(ROM_NAME): $(SOURCEDIR)/mmc3.cfg $(O_FILES)
 	ld65 -m $(BUILDDIR)/map.txt --dbgfile $(DBG_NAME) -o $@ -C $^
