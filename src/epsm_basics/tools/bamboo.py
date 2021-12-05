@@ -173,6 +173,36 @@ class FmEnvelope:
     def __repr__(self):
         return "FmEnvelope(%s)" % self.index
 
+def default_fm_envelope(index=0):
+    op1 = FmOperatorDefinition(
+        enabled=True,
+        attack_rate=31,
+        release_rate=7,
+        total_level=32,
+    )
+    op2 = FmOperatorDefinition(
+        enabled=True,
+        attack_rate=31,
+        release_rate=7,
+    )
+    op3 = FmOperatorDefinition(
+        enabled=True,
+        attack_rate=31,
+        release_rate=7,
+        total_level=32
+    )
+    op4 = FmOperatorDefinition(
+        enabled=True,
+        attack_rate=31,
+        release_rate=7
+    )
+    return FmEnvelope(
+        index=index,
+        algorithm=4,
+        operators=[op1, op2, op3, op4]
+    )
+
+
 class Groove:
     def __init__(self, index=0, row_lengths=[]):
         self.index = index

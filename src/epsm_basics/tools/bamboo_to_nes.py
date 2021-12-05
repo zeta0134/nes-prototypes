@@ -124,6 +124,44 @@ def compile_pattern(pattern):
 	compiled_bytecode.append(0xFF)
 	return compiled_bytecode
 
+def compile_single_operator(fm_operator):
+	detune_multiple = ((fm_operator.detune & 0x7) << 3) | (fm_operator.multiple & 0xF)
+	total_level = fm_operator.total_level & 0x7F
+	key_scale_and_attack_rate = ((fm_operator.key_scale & 0x3) << 6) | (fm_operator.attack_rate & 0x1F)
+	decay_rate = fm_operator.decay_rate & 0x1F
+	sustain_rate = fm_operator.sustain_rate & 0x1F
+	sustain_level_and_release_rate = ((fm_operator.sustain_level & 0xF) << 4) | (fm_operator.release_rate & 0xF)
+	ssg_type_envelope_control = 0
+	if fm_operator.ssg_envelope_type is not None:
+		ssg_type_envelope_control = 0x8 | (int(fm_operator.ssg_envelope_type) & 0xF)
+
+	compiled_bytes = [
+		detune_multiple, total_level, key_scale_and_attack_rate, decay_rate,
+		sustain_rate, sustain_level_and_release_rate, ssg_type_envelope_control, 
+	]
+	return compiled_bytes
+
+def compile_fm_patch(envelope):
+	# Note: does not even attempt to support LFO settings.
+	# LFO will be entirely disabled.
+	operators_enabled_byte = 0
+	algorithm_feedback = ((envelope.feedback & 0x7) << 3) | (envelope.algorithm & 0x7)
+	compiled_envelopes = []
+	for operator in envelope.operators:
+		if operator.enabled:
+			compiled_envelopes.extend(compile_single_operator(operator))
+			operators_enabled_byte = operators_enabled_byte | 0x80
+		operators_enabled_byte = operators_enabled_byte >> 1
+	# now move the enable bits to the lower part of this register, for easier consuming
+	# by the 6502 routine that will read them
+	operators_enabled_byte = operators_enabled_byte >> 4
+	compiled_bytecode = [
+		algorithm_feedback,
+		operators_enabled_byte
+	]
+	compiled_bytecode.extend(compiled_envelopes)
+	return compiled_bytecode
+
 def pattern_label(song_index, track_index, pattern_index):
 	channel_type = bamboo.StandardTrackType(track_index)
 	return f"btm_song{song_index}_{channel_type.name.lower()}_pattern{pattern_index}"
@@ -134,6 +172,9 @@ def frame_header(song_index):
 def frame_label(song_index, frame_index):
 	return f"btm_song{song_index}_frame{frame_index}"
 
+def fm_patch_label(patch_index):
+	return f"btm_fm_patch_{patch_index}"
+
 # Ugly debug code to follow! Clean this up, eventually
 
 def ca65_byte_literal(value):
@@ -143,8 +184,8 @@ def pretty_print_table(table_name, raw_bytes, width=16):
   """ Formats a list of byte strings, 16 per line
 
   Just for style purposes, I'd like to collapse the table so that 
-  only 8 bytes are printed on each line. This is nicer than one 
-  giant line or 128 individual .byte statements.
+  only 16 bytes are printed on each line. This is nicer than one 
+  giant line or tons of individual .byte statements.
   """
   formatted_bytes = [ca65_byte_literal(byte) for byte in raw_bytes]
   print("%s:" % table_name)
@@ -156,6 +197,19 @@ def pretty_print_table(table_name, raw_bytes, width=16):
   if len(final_row) > 0:
   	final_row_text = ", ".join(final_row)
   	print("  .byte %s" % final_row_text)
+
+def print_fm_patches(module):
+	# first, emit the default FM patch, in case any instruments need to reference it
+	# (note: can we detect when this is unneeded, and omit it for size reasons?)
+	bytecode = compile_fm_patch(bamboo.default_fm_envelope())
+	label = fm_patch_label("default")
+	pretty_print_table(label, bytecode)
+	# Now loop through and emit each extant envelope in the module, named after
+	# the index used to reference it
+	for index, envelope in module.fm_envelopes.items():
+		bytecode = compile_fm_patch(envelope)
+		label = fm_patch_label(index)
+		pretty_print_table(label, bytecode)
 
 def print_patterns(module):
 	for song_index in range(0, len(module.songs)):
@@ -199,5 +253,8 @@ def print_frames(module):
 
 module = bamboo.read_module("ponicanyon.btm")
 
-print_frames(module)
-print_patterns(module)
+#print_frames(module)
+#print_patterns(module)
+print(module.fm_envelopes)
+print_fm_patches(module)
+
