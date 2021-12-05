@@ -201,8 +201,39 @@ def pretty_print_table(raw_bytes, width=16):
   	final_row_text = ", ".join(final_row)
   	print("  .byte %s" % final_row_text)
 
+def print_fm_instrument(instrument, fm_envelopes):
+	print(f"  .byte 32 {ca65_comment('FM')}")
+	# for now, FM instruments only have an envelope definition.
+	# We'll almost certainly need to expand on this moving forward
+	if instrument.envelope_index in fm_envelopes:
+		print(f"  .word {fm_patch_label(instrument.envelope_index)}")
+	else:
+		print(f"  .word {fm_patch_label('default')}")
+
+def print_ssg_instrument(instrument):
+	print(f"  .byte 33 {ca65_comment('SSG')}")
+	print(f"  {ca65_comment('UNIMPLEMENTED!')}")
+
+def print_unsupported_instrument(instrument):
+	print(f"  .byte 255 {ca65_comment('UNSUPPORTED')}")
+
+def print_instrument_table(module):
+	print(ca65_label("btm_instrument_list"))
+	for index, instrument in module.instruments.items():
+		print(f"  .word {instrument_label(index)} {ca65_comment(instrument.name)}")
+
 def print_instruments(module):
-	pass
+	for index, instrument in module.instruments.items():
+		print(ca65_label(instrument_label(index)))
+		print(f"  {ca65_comment(instrument.name)}")
+		if type(instrument) is bamboo.FmInstrument:
+			print_fm_instrument(instrument, module.fm_envelopes)
+		elif type(instrument) is bamboo.SsgInstrument:
+			print_ssg_instrument(instrument)
+		else:
+			# We need to print *something* for unsupported instruments, so the
+			# table has data to point to.
+			print_unsupported_instrument(instrument)
 
 def print_fm_patch(raw_label, algorithm_feedback, operators_enabled_byte, compiled_envelopes):
 	formatted_label = fm_patch_label(raw_label)
@@ -269,6 +300,7 @@ module = bamboo.read_module("ponicanyon.btm")
 
 #print_frames(module)
 #print_patterns(module)
-print(module.fm_envelopes)
+print_instrument_table(module)
+print_instruments(module)
 print_fm_patches(module)
 
