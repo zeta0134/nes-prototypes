@@ -148,19 +148,14 @@ def compile_fm_patch(envelope):
 	algorithm_feedback = ((envelope.feedback & 0x7) << 3) | (envelope.algorithm & 0x7)
 	compiled_envelopes = []
 	for operator in envelope.operators:
+		operators_enabled_byte = operators_enabled_byte >> 1
 		if operator.enabled:
 			compiled_envelopes.extend(compile_single_operator(operator))
 			operators_enabled_byte = operators_enabled_byte | 0x80
-		operators_enabled_byte = operators_enabled_byte >> 1
 	# now move the enable bits to the lower part of this register, for easier consuming
 	# by the 6502 routine that will read them
 	operators_enabled_byte = operators_enabled_byte >> 4
-	compiled_bytecode = [
-		algorithm_feedback,
-		operators_enabled_byte
-	]
-	compiled_bytecode.extend(compiled_envelopes)
-	return compiled_bytecode
+	return algorithm_feedback, operators_enabled_byte, compiled_envelopes
 
 def pattern_label(song_index, track_index, pattern_index):
 	channel_type = bamboo.StandardTrackType(track_index)
@@ -175,20 +170,28 @@ def frame_label(song_index, frame_index):
 def fm_patch_label(patch_index):
 	return f"btm_fm_patch_{patch_index}"
 
+def instrument_label(instrument_index):
+	return f"btm_instrument_{instrument_index}"
+
 # Ugly debug code to follow! Clean this up, eventually
 
 def ca65_byte_literal(value):
   return "$%02x" % (value & 0xFF)
 
-def pretty_print_table(table_name, raw_bytes, width=16):
+def ca65_comment(text):
+ 	return f"; {text}"
+
+def ca65_label(label_name):
+	return f"{label_name}:"
+
+def pretty_print_table(raw_bytes, width=16):
   """ Formats a list of byte strings, 16 per line
 
   Just for style purposes, I'd like to collapse the table so that 
-  only 16 bytes are printed on each line. This is nicer than one 
+  only so many bytes are printed on each line. This is nicer than one 
   giant line or tons of individual .byte statements.
   """
   formatted_bytes = [ca65_byte_literal(byte) for byte in raw_bytes]
-  print("%s:" % table_name)
   for table_row in range(0, int(len(formatted_bytes) / width)):
     row_text = ", ".join(formatted_bytes[table_row * width : table_row * width + width])
     print("  .byte %s" % row_text)
@@ -198,18 +201,28 @@ def pretty_print_table(table_name, raw_bytes, width=16):
   	final_row_text = ", ".join(final_row)
   	print("  .byte %s" % final_row_text)
 
+def print_instruments(module):
+	pass
+
+def print_fm_patch(raw_label, algorithm_feedback, operators_enabled_byte, compiled_envelopes):
+	formatted_label = fm_patch_label(raw_label)
+	print(ca65_label(formatted_label))
+	print(f"  .byte {ca65_byte_literal(algorithm_feedback)} ; algorithm / feedback")
+	print(f"  .byte {ca65_byte_literal(operators_enabled_byte)} ; operators enabled")
+	print("  ; operator definitions:")
+	print("  ;     D/M  TL   KSAR DR   SR   SLRR SSG")
+	pretty_print_table(compiled_envelopes, 7)
+
 def print_fm_patches(module):
 	# first, emit the default FM patch, in case any instruments need to reference it
 	# (note: can we detect when this is unneeded, and omit it for size reasons?)
-	bytecode = compile_fm_patch(bamboo.default_fm_envelope())
-	label = fm_patch_label("default")
-	pretty_print_table(label, bytecode)
+	algorithm_feedback, operators_enabled_byte, compiled_envelopes = compile_fm_patch(bamboo.default_fm_envelope())
+	print_fm_patch("default", algorithm_feedback, operators_enabled_byte, compiled_envelopes)
 	# Now loop through and emit each extant envelope in the module, named after
 	# the index used to reference it
 	for index, envelope in module.fm_envelopes.items():
-		bytecode = compile_fm_patch(envelope)
-		label = fm_patch_label(index)
-		pretty_print_table(label, bytecode)
+		algorithm_feedback, operators_enabled_byte, compiled_envelopes = compile_fm_patch(envelope)
+		print_fm_patch(index, algorithm_feedback, operators_enabled_byte, compiled_envelopes)
 
 def print_patterns(module):
 	for song_index in range(0, len(module.songs)):
@@ -220,7 +233,8 @@ def print_patterns(module):
 				pattern = track.patterns[pattern_index]
 				bytecode = compile_pattern(pattern)
 				label = pattern_label(song_index, track_index, pattern_index)
-				pretty_print_table(label, bytecode)
+				print(ca65_label(label))
+				pretty_print_table(bytecode)
 
 
 def print_frames(module):
