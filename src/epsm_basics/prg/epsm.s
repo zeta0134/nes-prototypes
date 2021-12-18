@@ -7,7 +7,8 @@
 
     .zeropage
 epsm_command_index: .res 1
-.exportzp epsm_command_index
+epsm_temp_command_index: .res 1
+.exportzp epsm_command_index, epsm_temp_command_index
 
     .segment "RAM"
 ; this almost certainly needs to be larger, but it'll do for now

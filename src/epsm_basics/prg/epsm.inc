@@ -46,7 +46,7 @@ EPSM_SSG_ENVELOPE_HOLD      = %00000001
 .import epsm_reg_high_buffer
 .import epsm_data_low_buffer
 .import epsm_data_high_buffer
-.importzp epsm_command_index
+.importzp epsm_command_index, epsm_temp_command_index
 .import epsm_init, epsm_write_commands_4016
 
 ; 8 cycles when branch taken, 12 cycles when not, ONLY
@@ -67,7 +67,7 @@ no_carry:
 ; which can precompute the bit manipulation and save 6502 cycles
 .macro epsm_queue_low_command register, value
 .scope
-    ldy epsm_command_index
+    ldy epsm_temp_command_index
     lda register
     ; isolate the high nybble, and add in the latch flags
     and #$F0 
@@ -81,7 +81,7 @@ no_carry:
     asl
     sta epsm_reg_low_buffer, y
     ; do the same for data
-    ldy epsm_command_index
+    ldy epsm_temp_command_index
     lda value
     ; isolate the high nybble, and add in the latch flags
     and #$F0 
@@ -94,7 +94,7 @@ no_carry:
     asl
     asl
     sta epsm_data_low_buffer, y
-    inc epsm_command_index
+    inc epsm_temp_command_index
 .endscope
 .endmacro
 
@@ -103,7 +103,7 @@ no_carry:
 ; which can precompute the bit manipulation and save 6502 cycles
 .macro epsm_queue_high_command register, value
 .scope
-    ldy epsm_command_index
+    ldy epsm_temp_command_index
     lda register
     ; isolate the high nybble, and add in the latch flags
     and #$F0 
@@ -117,7 +117,7 @@ no_carry:
     asl
     sta epsm_reg_low_buffer, y
     ; do the same for data
-    ldy epsm_command_index
+    ldy epsm_temp_command_index
     lda value
     ; isolate the high nybble, and add in the latch flags
     and #$F0 
@@ -130,6 +130,6 @@ no_carry:
     asl
     asl
     sta epsm_data_low_buffer, y
-    inc epsm_command_index
+    inc epsm_temp_command_index
 .endscope
 .endmacro

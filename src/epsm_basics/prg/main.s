@@ -13,7 +13,6 @@ epsm_reg_scratch: .res 1
 epsm_data_scratch: .res 1
 vgm_ptr: .res 2
 vgm_page: .res 1
-epsm_temp_command_index: .res 1
 register_ptr: .res 2
 
         .segment "RAM"
@@ -228,11 +227,39 @@ done:
 .endproc
 
 .proc command_epsm_a0_write
-        jmp unimplemented_command
+        jsr read_vgm_byte
+        tax ; command count
+        beq done
+loop:
+        ; read reg and data
+        jsr read_vgm_byte
+        sta epsm_reg_scratch
+        jsr read_vgm_byte
+        sta epsm_data_scratch
+        ; add it to the active EPSM buffer
+        epsm_queue_low_command epsm_reg_scratch, epsm_data_scratch
+        dex
+        bne loop
+done:
+        rts
 .endproc
 
 .proc command_epsm_a1_write
-        jmp unimplemented_command
+        jsr read_vgm_byte
+        tax ; command count
+        beq done
+loop:
+        ; read reg and data
+        jsr read_vgm_byte
+        sta epsm_reg_scratch
+        jsr read_vgm_byte
+        sta epsm_data_scratch
+        ; add it to the active EPSM buffer
+        epsm_queue_high_command epsm_reg_scratch, epsm_data_scratch
+        dex
+        bne loop
+done:
+        rts
 .endproc
 
 .proc command_s5b_write
