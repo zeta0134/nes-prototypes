@@ -13,14 +13,17 @@ epsm_reg_scratch: .res 1
 epsm_data_scratch: .res 1
 vgm_ptr: .res 2
 vgm_page: .res 1
+epsm_temp_command_index: .res 1
+register_ptr: .res 2
 
         .segment "RAM"
 nmi_counter: .byte $00
 
         .segment "VGM"
         ;.include "../vgm/ponicanyon.asm"
-        .include "../vgm/poni_conv.asm"
-
+        ;.include "../vgm/poni_conv.asm"
+        ;.include "../vgm/Untitled.asm" ; VRC7, for some reason
+        .include "../vgm/rag_all_night_long.asm"
 
         .segment "PRGLAST_E000"
         .export start, nmi, irq
@@ -77,18 +80,6 @@ main_loop:
         rts
 .endproc
 
-.proc zeta_test
-        ;epsm_queue_low_command #$29, #$80 ; Yoey init commands
-        ;epsm_queue_low_command #$27, #$00 ;
-        ; begin our commands
-        epsm_queue_low_command #EPSM_SSG_B_PERIOD_LOW, #$FF
-        epsm_queue_low_command #EPSM_SSG_B_PERIOD_HIGH, #$00
-        epsm_queue_low_command #EPSM_SSG_B_VOLUME, #$0F
-        epsm_queue_low_command #EPSM_SSG_CHANNEL_CONTROL, #$38 ; enable tone, but not noise
-        ;epsm_finalize_buffers
-        rts
-.endproc
-
 .proc increment_vgm_ptr
         inc16 vgm_ptr
         ; if we advanced past the end of the page, we need to 
@@ -107,12 +98,21 @@ done:
         rts
 .endproc
 
+.proc read_vgm_byte
+        ldy #0
+        lda (vgm_ptr), y
+        pha ; preserve
+        jsr increment_vgm_ptr
+        pla ; un-preserve
+        rts
+.endproc
+
 delay_mask: .byte %00000001
 
 ; Note: this function is sychronous; it does not return until playback is complete.
 ; Later, I'd like to rework it to return when a frame delay is reached, so that it can
 ; be called in a more typical game loop.
-.proc play_vgm
+.proc play_vgm_old
         st16 vgm_ptr, $8000
         lda #0
         sta vgm_page
@@ -157,6 +157,137 @@ finished:
         rts
 .endproc
 
+.proc init_vgm_player
+        ; reset the EPSM command buffer
+        lda #0
+        sta epsm_temp_command_index
+        sta epsm_command_index
+        ; rewind the VGM pointer to the beginning
+        lda #$80
+        sta vgm_ptr+1
+        lda #$00
+        sta vgm_ptr
+        ; set the VGM page to the start of the track data
+        ; note: if we want to support multiple tracks in a single ROM,
+        ; we could load that here as an argument
+        lda #0
+        sta vgm_page
+        mmc3_select_bank $6, vgm_page
+        rts
+.endproc
+
+.proc command_waitframe
+        ; prep the EPSM buffer for emptying
+        lda epsm_temp_command_index
+        sta epsm_command_index
+        jsr wait_for_nmi
+        lda #0
+        sta epsm_temp_command_index
+        sta epsm_command_index
+        rts
+.endproc
+
+.proc unimplemented_command
+        ; Bit of a dirty hack here. This assumes the command specifies
+        ; a "length" in register writes, and that each length corresponds to
+        ; 2 bytes of data. We're going to read all of that data and throw it
+        ; away. This WILL FAIL if any command is introduced which does not
+        ; follow this pattern.
+        jsr read_vgm_byte
+        tax ; X will be our command counter
+        ; we really *shouldn't* have empty commands, but on the off chance
+        ; that we do...
+        beq done
+loop:
+        jsr read_vgm_byte ; and throw it away
+        jsr read_vgm_byte ; and throw it away
+        dex
+        bne loop
+done:
+        rts
+.endproc
+
+.proc command_apu_write
+        jsr read_vgm_byte
+        tax ; command count
+        beq done
+        lda #$40
+        sta register_ptr+1 ; all APU commands are of form $40xx
+        ldy #0
+loop:
+        ; register address, low byte
+        jsr read_vgm_byte
+        sta register_ptr
+        ; data
+        jsr read_vgm_byte
+        sta (register_ptr), y
+        dex
+        bne loop
+done:
+        rts  
+.endproc
+
+.proc command_epsm_a0_write
+        jmp unimplemented_command
+.endproc
+
+.proc command_epsm_a1_write
+        jmp unimplemented_command
+.endproc
+
+.proc command_s5b_write
+        jmp unimplemented_command
+.endproc
+
+.proc command_vrc7_write
+        jmp unimplemented_command
+.endproc
+
+; note: this assumes that VGM init is already called. Later it
+; might be reworked so that it can be called while a VGM is in
+; progress, so that "waitframe" can exit the loop, rather than
+; doing an inline vblank spin
+.proc play_vgm_new
+loop:
+        ; read a command byte
+        jsr read_vgm_byte
+        ; dispatch the chosen command
+check_waitframe:
+        cmp #WAITFRAME
+        bne check_apu_write
+        jsr command_waitframe
+        jmp loop
+check_apu_write:
+        cmp #APU_WRITE
+        bne check_epsm_a0_write
+        jsr command_apu_write
+        jmp loop
+check_epsm_a0_write:
+        cmp #EPSM_A0_WRITE
+        bne check_epsm_a1_write
+        jsr command_epsm_a0_write
+        jmp loop
+check_epsm_a1_write:
+        cmp #EPSM_A1_WRITE
+        bne check_s5b_write
+        jsr command_epsm_a1_write
+        jmp loop
+check_s5b_write:
+        cmp #S5B_WRITE
+        bne check_vrc7_write
+        jsr command_s5b_write
+        jmp loop
+check_vrc7_write:
+        cmp #VRC7_WRITE
+        bne is_unimplemented_command
+        jsr command_vrc7_write
+        jmp loop
+is_unimplemented_command:
+        jsr unimplemented_command
+        jmp loop
+        ; Will never be reached in the current implementation
+.endproc
+
 .proc start
         lda #$00
         sta PPUMASK ; disable rendering
@@ -191,7 +322,9 @@ finished:
         jsr epsm_init
         ;jsr load_asm
         ;jsr zeta_test
-        jsr play_vgm
+        ;jsr play_vgm
+        jsr init_vgm_player
+        jsr play_vgm_new
 
 gameloop:
         jsr wait_for_nmi
