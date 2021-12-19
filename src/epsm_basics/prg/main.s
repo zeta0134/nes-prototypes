@@ -35,46 +35,6 @@ epsm_palette:
         sta PPUMASK
 .endmacro
 
-; wrapper functions to deal with asm things for a crude test
-.proc sendtoYM
-        sta epsm_reg_scratch
-        sty epsm_data_scratch
-        epsm_queue_low_command epsm_reg_scratch, epsm_data_scratch
-        rts
-.endproc
-
-; note: assuming here that our reg write loop is low enough delay
-; for the difference to not matter
-.proc sendtoYMLowDelay
-        sta epsm_reg_scratch
-        sty epsm_data_scratch
-        epsm_queue_low_command epsm_reg_scratch, epsm_data_scratch
-        rts
-.endproc
-
-.proc sendtoYM2
-        sta epsm_reg_scratch
-        sty epsm_data_scratch
-        epsm_queue_high_command epsm_reg_scratch, epsm_data_scratch
-        rts
-.endproc
-
-.proc sendtoYM2LowDelay
-        sta epsm_reg_scratch
-        sty epsm_data_scratch
-        epsm_queue_high_command epsm_reg_scratch, epsm_data_scratch
-        rts
-.endproc
-
-.proc delayloop
-        ; wait one frame? sure, why not
-        ; epsm_finalize_buffers
-        jsr wait_for_nmi
-        ; now the previous buffer has been processed, so clear out those commands
-        jsr epsm_init
-        rts
-.endproc
-
 .proc increment_vgm_ptr
         inc16 vgm_ptr
         ; if we advanced past the end of the page, we need to 
