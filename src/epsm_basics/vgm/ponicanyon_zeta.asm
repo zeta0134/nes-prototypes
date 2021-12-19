@@ -5,6 +5,8 @@ EPSM_A1_WRITE = 4
 S5B_WRITE = 5
 VRC7_WRITE = 6
 N163_WRITE = 7
+LOOP_VGM = 8
+STOP_VGM = 9
 .byte EPSM_A0_WRITE, $05
   .byte $29, $80, $27, $00, $b4, $c0, $b5, $c0, $b6, $c0
 .byte EPSM_A1_WRITE, $03
@@ -12363,3 +12365,4 @@ N163_WRITE = 7
   .byte $86, $00, $96, $00, $3e, $0c, $4e, $1d, $5e, $07, $6e, $00, $7e, $05, $8e, $0c
   .byte $9e, $00, $b6, $40, $62, $00, $6a, $00, $66, $00, $6e, $00, $b6, $80, $a6, $0c
   .byte $a2, $12
+.byte LOOP_VGM

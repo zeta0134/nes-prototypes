@@ -68,6 +68,20 @@ class NesNtscWaitCommand:
     def __repr__(self):
         return "NesNtscWaitCommand(%s frames at 60 Hz)" % (self.frames_to_wait)
 
+class NesLoopCommand:
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "NesLoopCommand"
+
+class NesStopCommand:
+    def __init__(self):
+        pass
+
+    def __repr__(self):
+        return "NesStopCommand"
+
 class NesApuCommand:
     def __init__(self, low_address, data):
         if low_address > 0x1F:
@@ -190,6 +204,10 @@ def command_header(example_command, length=None):
         header += f"S5B_WRITE"
     if type(example_command) == NesNtscWaitCommand:
         header += f"WAITFRAME"
+    if type(example_command) == NesLoopCommand:
+        header += f"LOOP_VGM"
+    if type(example_command) == NesStopCommand:
+        header += f"STOP_VGM"
     if length != None:
         header += ", $%02X" % length
 
@@ -206,6 +224,7 @@ def command_bytes(command):
         return [command.address, command.data]
     if type(command) == NesNtscWaitCommand:
         return [command.frames_to_wait]
+    return []
 
 # for writing one collapsed command block, of 255 elements or less
 # please note: every command in command_list must be the same!
@@ -281,7 +300,7 @@ def collapse_waitframes(command_blocks):
                     accumulated_frames = 0
     return modified_command_blocks
 
-def write_vgm_to(file, vgm):
+def write_vgm_to(file, vgm, loop=True):
     file.write("WAITFRAME = 1\n")
     file.write("APU_WRITE = 2\n")
     file.write("EPSM_A0_WRITE = 3\n")
@@ -289,18 +308,24 @@ def write_vgm_to(file, vgm):
     file.write("S5B_WRITE = 5\n")
     file.write("VRC7_WRITE = 6\n")
     file.write("N163_WRITE = 7\n")
+    file.write("LOOP_VGM = 8\n")
+    file.write("STOP_VGM = 9\n")
 
     collapsed_commands = collapse_commands(vgm.commands)
     ntsc_timed_commands = collapse_waitframes(collapsed_commands)
+    if loop:
+        ntsc_timed_commands.append([NesLoopCommand()])
+    else:
+        ntsc_timed_commands.append([NesStopCommand()])
     for command_block in ntsc_timed_commands:
         write_command_block(file, command_block)
 
-with open("rag_all_night_long.vgm", 'rb') as vgm_file:
+with open("ponicanyon.vgm", 'rb') as vgm_file:
     raw_data = vgm_file.read()
     vgm = VgmFile(raw_data)
     print("0x%04X" % vgm.version())
     print(vgm.vgm_offset())
     print(len(vgm.raw_vgm_data))
-    with open("../vgm/rag_all_night_long_zeta.asm", 'w') as asm_file:
+    with open("../vgm/ponicanyon_zeta.asm", 'w') as asm_file:
         write_vgm_to(asm_file, vgm)
     print("Wrote the thing!")

@@ -5,6 +5,8 @@ EPSM_A1_WRITE = 4
 S5B_WRITE = 5
 VRC7_WRITE = 6
 N163_WRITE = 7
+LOOP_VGM = 8
+STOP_VGM = 9
 .byte APU_WRITE, $08
   .byte $15, $0f, $08, $80, $0f, $00, $00, $30, $04, $30, $0c, $30, $01, $08, $05, $08
 .byte S5B_WRITE, $01
@@ -23951,3 +23953,4 @@ N163_WRITE = 7
 .byte WAITFRAME, $01
 .byte APU_WRITE, $02
   .byte $04, $b0, $08, $80
+.byte LOOP_VGM

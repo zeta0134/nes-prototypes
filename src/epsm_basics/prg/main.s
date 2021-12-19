@@ -24,8 +24,8 @@ nmi_counter: .byte $00
         ;.include "../vgm/Untitled.asm" ; VRC7, for some reason
         ;.include "../vgm/rag_all_night_long.asm"
         ;.include "../vgm/perkkatest.asm"
-        ;.include "../vgm/ponicanyon_zeta.asm"
-        .include "../vgm/rag_all_night_long_zeta.asm"
+        .include "../vgm/ponicanyon_zeta.asm"
+        ;.include "../vgm/rag_all_night_long_zeta.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
 
@@ -206,6 +206,31 @@ done:
         rts
 .endproc
 
+.proc command_loop_vgm
+        ; rewind the VGM pointer to the beginning
+        lda #$80
+        sta vgm_ptr+1
+        lda #$00
+        sta vgm_ptr
+        ; set the VGM page to the start of the track data
+        ; note: if we want to support multiple tracks in a single ROM,
+        ; we could load that here as an argument
+        lda #0
+        sta vgm_page
+        mmc3_select_bank $6, vgm_page
+        ; wait a frame, to ensure the register writes from before this
+        ; have time to settle?
+        lda epsm_temp_command_index
+        sta epsm_command_index
+        debug_color 0 ; off
+        jsr wait_for_nmi
+        lda #0
+        sta epsm_temp_command_index
+        sta epsm_command_index
+        ; all done
+        rts
+.endproc
+
 .proc unimplemented_command
         ; Bit of a dirty hack here. This assumes the command specifies
         ; a "length" in register writes, and that each length corresponds to
@@ -340,8 +365,13 @@ check_s5b_write:
         jmp loop
 check_vrc7_write:
         cmp #VRC7_WRITE
-        bne is_unimplemented_command
+        bne check_vgm_loop
         jsr command_vrc7_write
+        jmp loop
+check_vgm_loop:
+        cmp #LOOP_VGM
+        bne is_unimplemented_command
+        jsr command_loop_vgm
         jmp loop
 is_unimplemented_command:
         jsr unimplemented_command
