@@ -14,20 +14,20 @@ epsm_data_scratch: .res 1
 vgm_ptr: .res 2
 vgm_page: .res 1
 register_ptr: .res 2
-
+ptr: .res 2
         .segment "RAM"
 nmi_counter: .byte $00
 
         .segment "VGM"
-        ;.include "../vgm/ponicanyon.asm"
-        ;.include "../vgm/poni_conv.asm"
-        ;.include "../vgm/Untitled.asm" ; VRC7, for some reason
-        ;.include "../vgm/rag_all_night_long.asm"
-        ;.include "../vgm/perkkatest.asm"
         .include "../vgm/ponicanyon_zeta.asm"
         ;.include "../vgm/rag_all_night_long_zeta.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
+
+epsm_nametable:
+        .incbin "chr/epsm.nam"
+epsm_palette:
+        .incbin "chr/epsm.pal"
 
 .macro debug_color flags
         lda #(BG_ON | OBJ_ON | BG_CLIP | OBJ_CLIP | flags)
@@ -74,18 +74,6 @@ nmi_counter: .byte $00
         rts
 .endproc
 
-.proc load_asm
-        .include "../vgm/four_note_test.asm"
-main_loop:
-        ; clean out the last command buffer and wait for it to process
-        ; epsm_finalize_buffers
-        jsr wait_for_nmi
-        ; now empty the buffer and exit
-        jsr epsm_init
-        ;epsm_finalize_buffers
-        rts
-.endproc
-
 .proc increment_vgm_ptr
         inc16 vgm_ptr
         ; if we advanced past the end of the page, we need to 
@@ -110,56 +98,6 @@ done:
         pha ; preserve
         jsr increment_vgm_ptr
         pla ; un-preserve
-        rts
-.endproc
-
-delay_mask: .byte %00000001
-
-; Note: this function is sychronous; it does not return until playback is complete.
-; Later, I'd like to rework it to return when a frame delay is reached, so that it can
-; be called in a more typical game loop.
-.proc play_vgm_old
-        st16 vgm_ptr, $8000
-        lda #0
-        sta vgm_page
-        mmc3_select_bank $6, vgm_page
-        ldy #0
-        sty epsm_command_index ; clear out the command index entirely
-        ; note: if we lag, the command buffer will be empty. This is by design,
-        ; we don't want to try to play an incompletely written buffer.
-        ldx #0 ; temporary position within the buffer
-playback_loop:
-        lda (vgm_ptr), y
-        ; check: is this a delay command?
-        cmp #$01
-        beq delay_one_frame
-        ; this is indeed a standard command, so queue it up
-        sta epsm_reg_high_buffer, x
-        jsr increment_vgm_ptr
-        lda (vgm_ptr), y
-        sta epsm_reg_low_buffer, x
-        jsr increment_vgm_ptr
-        lda (vgm_ptr), y
-        sta epsm_data_high_buffer, x
-        jsr increment_vgm_ptr 
-        lda (vgm_ptr), y
-        sta epsm_data_low_buffer, x
-        jsr increment_vgm_ptr 
-        inx
-        jmp playback_loop
-delay_one_frame:
-        jsr increment_vgm_ptr
-        stx epsm_command_index
-        jsr wait_for_nmi
-        ldx #0
-        stx epsm_command_index
-        jmp playback_loop
-finished:
-        ; clear out the very last buffer:
-        stx epsm_command_index
-        jsr wait_for_nmi
-        ; now reset and exit to the main loop
-        jsr epsm_init
         rts
 .endproc
 
@@ -379,6 +317,34 @@ is_unimplemented_command:
         ; Will never be reached in the current implementation
 .endproc
 
+; put the nametable you want to load in ptr, the destination in PPUADDR
+.proc load_nametable
+; left side
+        st16 R0, ($400 + $100 - $1)
+        ldy #0
+loop:
+        lda (ptr), y
+        sta PPUDATA
+        inc16 ptr
+        dec16 R0
+        bne loop
+
+        rts
+.endproc
+
+; put the palette you want to load in ptr
+.proc load_bg_palette
+        set_ppuaddr #$3F00
+        ldy #0
+loop:
+        lda (ptr), y
+        sta PPUDATA
+        iny
+        cpy #16
+        bne loop
+        rts
+.endproc
+
 .proc start
         lda #$00
         sta PPUMASK ; disable rendering
@@ -386,9 +352,15 @@ is_unimplemented_command:
 
         jsr initialize_mmc3
 
+        ; load some pretty test graphics
+        st16 ptr, epsm_palette
+        jsr load_bg_palette
+        st16 ptr, epsm_nametable
+        set_ppuaddr #$2000
+        jsr load_nametable
+
         ; before we enable NMI, empty out both EPSM command buffers
         jsr epsm_init
-        ;epsm_finalize_buffers
 
         ; re-enable graphics
         lda #$1E
