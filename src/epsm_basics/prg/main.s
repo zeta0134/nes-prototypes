@@ -22,10 +22,16 @@ nmi_counter: .byte $00
         ;.include "../vgm/ponicanyon.asm"
         ;.include "../vgm/poni_conv.asm"
         ;.include "../vgm/Untitled.asm" ; VRC7, for some reason
-        .include "../vgm/rag_all_night_long.asm"
-
+        ;.include "../vgm/rag_all_night_long.asm"
+        ;.include "../vgm/perkkatest.asm"
+        .include "../vgm/ponicanyon_zeta.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
+
+.macro debug_color flags
+        lda #(BG_ON | OBJ_ON | BG_CLIP | OBJ_CLIP | flags)
+        sta PPUMASK
+.endmacro
 
 ; wrapper functions to deal with asm things for a crude test
 .proc sendtoYM
@@ -176,13 +182,26 @@ finished:
 .endproc
 
 .proc command_waitframe
+        jsr read_vgm_byte
+        tax ; delay frame count
+        ; for the first frame only,
         ; prep the EPSM buffer for emptying
         lda epsm_temp_command_index
         sta epsm_command_index
+        debug_color 0 ; off
         jsr wait_for_nmi
         lda #0
         sta epsm_temp_command_index
         sta epsm_command_index
+        dex
+        beq done
+        ; now for the rest of the frames, we can simply delay in a loop
+delay_loop:
+        debug_color 0 ; off
+        jsr wait_for_nmi
+        dex
+        bne delay_loop
+done:
         rts
 .endproc
 
@@ -238,6 +257,13 @@ loop:
         sta epsm_data_scratch
         ; add it to the active EPSM buffer
         epsm_queue_low_command epsm_reg_scratch, epsm_data_scratch
+        ; if the buffer is now full, insert a wait frame to clear it out
+        ; (this will screw with tempo, it's fine)
+        lda epsm_temp_command_index
+        cmp #$FE
+        bne not_full
+        jsr command_waitframe
+not_full:
         dex
         bne loop
 done:
@@ -256,6 +282,13 @@ loop:
         sta epsm_data_scratch
         ; add it to the active EPSM buffer
         epsm_queue_high_command epsm_reg_scratch, epsm_data_scratch
+        ; if the buffer is now full, insert a wait frame to clear it out
+        ; (this will screw with tempo, it's fine)
+        lda epsm_temp_command_index
+        cmp #$FE
+        bne not_full
+        jsr command_waitframe
+not_full:
         dex
         bne loop
 done:
@@ -389,7 +422,9 @@ loop:
         sta OAM_DMA
         ; IMMEDIATELY process the command buffer. Cycle alignment matters!
         ;jsr epsm_write_commands_401x
+        debug_color TINT_R
         jsr epsm_write_commands_4016
+        debug_color LIGHTGRAY
 
 
         ; restore registers
