@@ -24,7 +24,8 @@ nmi_counter: .byte $00
         ;.include "../vgm/Untitled.asm" ; VRC7, for some reason
         ;.include "../vgm/rag_all_night_long.asm"
         ;.include "../vgm/perkkatest.asm"
-        .include "../vgm/ponicanyon_zeta.asm"
+        ;.include "../vgm/ponicanyon_zeta.asm"
+        .include "../vgm/rag_all_night_long_zeta.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
 
