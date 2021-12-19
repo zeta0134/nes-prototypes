@@ -320,12 +320,12 @@ def write_vgm_to(file, vgm, loop=True):
     for command_block in ntsc_timed_commands:
         write_command_block(file, command_block)
 
-with open("ponicanyon.vgm", 'rb') as vgm_file:
+with open("../vgm/led_storm_name_entry.vgm", 'rb') as vgm_file:
     raw_data = vgm_file.read()
     vgm = VgmFile(raw_data)
     print("0x%04X" % vgm.version())
     print(vgm.vgm_offset())
     print(len(vgm.raw_vgm_data))
-    with open("../vgm/ponicanyon_zeta.asm", 'w') as asm_file:
+    with open("../vgm/led_storm_name_entry.asm", 'w') as asm_file:
         write_vgm_to(asm_file, vgm)
     print("Wrote the thing!")

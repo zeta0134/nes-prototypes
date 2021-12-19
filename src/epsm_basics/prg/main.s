@@ -19,8 +19,9 @@ ptr: .res 2
 nmi_counter: .byte $00
 
         .segment "VGM"
-        .include "../vgm/ponicanyon_zeta.asm"
+        ;.include "../vgm/ponicanyon_zeta.asm"
         ;.include "../vgm/rag_all_night_long_zeta.asm"
+        .include "../vgm/led_storm_name_entry.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
 
@@ -425,7 +426,7 @@ loop:
         sta OAM_DMA
         ; IMMEDIATELY process the command buffer. Cycle alignment matters!
         ;jsr epsm_write_commands_401x
-        debug_color TINT_R
+        debug_color (LIGHTGRAY | TINT_R)
         jsr epsm_write_commands_4016
         debug_color LIGHTGRAY
 
