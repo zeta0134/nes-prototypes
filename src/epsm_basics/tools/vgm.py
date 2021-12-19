@@ -28,14 +28,15 @@ def _consume_int8_from(data_stream):
     return _consume_struct_from("<b", data_stream)
 
 class CommandType(Enum):
+    YM2608_A0 = 0x56
+    YM2608_A1 = 0x57
     WAIT_CUSTOM = 0x61
     WAIT_FRAME_60_HZ = 0x62
     WAIT_FRAME_50_HZ = 0x63
-    YM2608_A0 = 0x56
-    YM2608_A1 = 0x57
     END_OF_SOUND_DATA = 0x66
     DATA_BLOCK = 0x67
-    UNKNOWN = 256
+    YM2149F = 0xA0
+    NES_APU = 0xB4
 
 class Ym2608CommandLow:
     def __init__(self, address, data):
@@ -43,7 +44,7 @@ class Ym2608CommandLow:
         self.data = data
 
     def __repr__(self):
-        return "Ym2608Low(%02X, %02X)" % (self.address, self.data)
+        return "Ym2608Low(0x%02X, 0x%02X)" % (self.address, self.data)
 
 class Ym2608CommandHigh:
     def __init__(self, address, data):
@@ -51,7 +52,7 @@ class Ym2608CommandHigh:
         self.data = data
 
     def __repr__(self):
-        return "Ym2608High(%02X, %02X)" % (self.address, self.data)
+        return "Ym2608High(0x%02X, 0x%02X)" % (self.address, self.data)
 
 class VgmWaitCommand:
     def __init__(self, samples_to_wait):
@@ -66,6 +67,24 @@ class NesNtscWaitCommand:
 
     def __repr__(self):
         return "NesNtscWaitCommand(%s frames at 60 Hz)" % (self.frames_to_wait)
+
+class NesApuCommand:
+    def __init__(self, low_address, data):
+        if low_address > 0x1F:
+            raise Exception("Unsupported NES APU low range: " + low_address)
+        self.low_address = low_address
+        self.data = data
+
+    def __repr__(self):
+        return "NesApu(0x40%02X, 0x%02X)" % (self.low_address, self.data)
+
+class Ym2149FCommand:
+    def __init__(self, address, data):
+        self.address = address
+        self.data = data
+
+    def __repr__(self):
+        return "Ym2149F(0x%02X, 0x%02X)" % (self.address, self.data)
 
 def parse_data_block(command_stream):
     (dummy_command, command_stream) = _consume_uint8_from(command_stream)
@@ -105,6 +124,14 @@ def parse_command_list(command_stream):
             commands.append(VgmWaitCommand(735))
         if command_type == CommandType.WAIT_FRAME_50_HZ:
             commands.append(VgmWaitCommand(882))
+        if command_type == CommandType.NES_APU:
+            (low_address, command_stream) = _consume_uint8_from(command_stream)
+            (data, command_stream) = _consume_uint8_from(command_stream)
+            commands.append(NesApuCommand(low_address, data))
+        if command_type == CommandType.YM2149F:
+            (register, command_stream) = _consume_uint8_from(command_stream)
+            (data, command_stream) = _consume_uint8_from(command_stream)
+            commands.append(Ym2149FCommand(register, data))
         if command_type == CommandType.END_OF_SOUND_DATA:
             break
     return (commands, data_blocks)
@@ -157,6 +184,10 @@ def command_header(example_command, length=None):
         header += f"EPSM_A0_WRITE"
     if type(example_command) == Ym2608CommandHigh:
         header += f"EPSM_A1_WRITE"
+    if type(example_command) == NesApuCommand:
+        header += f"APU_WRITE"
+    if type(example_command) == Ym2149FCommand:
+        header += f"S5B_WRITE"
     if type(example_command) == NesNtscWaitCommand:
         header += f"WAITFRAME"
     if length != None:
@@ -168,6 +199,10 @@ def command_bytes(command):
     if type(command) == Ym2608CommandLow:
         return [command.address, command.data]
     if type(command) == Ym2608CommandHigh:
+        return [command.address, command.data]
+    if type(command) == NesApuCommand:
+        return [command.low_address, command.data]
+    if type(command) == Ym2149FCommand:
         return [command.address, command.data]
     if type(command) == NesNtscWaitCommand:
         return [command.frames_to_wait]
@@ -260,12 +295,12 @@ def write_vgm_to(file, vgm):
     for command_block in ntsc_timed_commands:
         write_command_block(file, command_block)
 
-with open("ponicanyon.vgm", 'rb') as vgm_file:
+with open("rag_all_night_long.vgm", 'rb') as vgm_file:
     raw_data = vgm_file.read()
     vgm = VgmFile(raw_data)
     print("0x%04X" % vgm.version())
     print(vgm.vgm_offset())
     print(len(vgm.raw_vgm_data))
-    with open("../vgm/ponicanyon_zeta.asm", 'w') as asm_file:
+    with open("../vgm/rag_all_night_long_zeta.asm", 'w') as asm_file:
         write_vgm_to(asm_file, vgm)
     print("Wrote the thing!")
