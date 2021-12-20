@@ -66,14 +66,13 @@ done:
         rts
 .endproc
 
-.proc read_vgm_byte
+.macro read_vgm_byte
         ldy #0
         lda (vgm_ptr), y
         pha ; preserve
         jsr increment_vgm_ptr
         pla ; un-preserve
-        rts
-.endproc
+.endmacro
 
 .proc init_vgm_player
         ; reset the EPSM command buffer
@@ -95,7 +94,7 @@ done:
 .endproc
 
 .proc command_waitframe
-        jsr read_vgm_byte
+        read_vgm_byte
         tax ; delay frame count
         ; for the first frame only,
         ; prep the EPSM buffer for emptying
@@ -149,14 +148,14 @@ done:
         ; 2 bytes of data. We're going to read all of that data and throw it
         ; away. This WILL FAIL if any command is introduced which does not
         ; follow this pattern.
-        jsr read_vgm_byte
+        read_vgm_byte
         tax ; X will be our command counter
         ; we really *shouldn't* have empty commands, but on the off chance
         ; that we do...
         beq done
 loop:
-        jsr read_vgm_byte ; and throw it away
-        jsr read_vgm_byte ; and throw it away
+        read_vgm_byte ; and throw it away
+        read_vgm_byte ; and throw it away
         dex
         bne loop
 done:
@@ -164,7 +163,7 @@ done:
 .endproc
 
 .proc command_apu_write
-        jsr read_vgm_byte
+        read_vgm_byte
         tax ; command count
         beq done
         lda #$40
@@ -172,10 +171,10 @@ done:
         ldy #0
 loop:
         ; register address, low byte
-        jsr read_vgm_byte
+        read_vgm_byte
         sta register_ptr
         ; data
-        jsr read_vgm_byte
+        read_vgm_byte
         sta (register_ptr), y
         dex
         bne loop
@@ -184,13 +183,13 @@ done:
 .endproc
 
 .proc command_epsm_a0_write
-        jsr read_vgm_byte
+        read_vgm_byte
         beq done
         sta counter ; command count
         ldx epsm_temp_command_index
 loop:
         ; read reg
-        jsr read_vgm_byte
+        read_vgm_byte
 
         ; LUT variant - 19 cycles
         tay ; 2
@@ -200,7 +199,7 @@ loop:
         sta epsm_reg_low_buffer, x ; 4
 
         ; now read data
-        jsr read_vgm_byte
+        read_vgm_byte
         tay ; 2
         lda a0_data_high_lut, y ; 4
         sta epsm_data_high_buffer, x ; 4
@@ -226,13 +225,13 @@ done:
 .endproc
 
 .proc command_epsm_a1_write
-        jsr read_vgm_byte
+        read_vgm_byte
         beq done
         sta counter ; command count
         ldx epsm_temp_command_index
 loop:
         ; read reg
-        jsr read_vgm_byte
+        read_vgm_byte
 
         ; LUT variant - 19 cycles
         tay ; 2
@@ -242,7 +241,7 @@ loop:
         sta epsm_reg_low_buffer, x ; 4
 
         ; now read data
-        jsr read_vgm_byte
+        read_vgm_byte
         tay ; 2
         lda a1_data_high_lut, y ; 4
         sta epsm_data_high_buffer, x ; 4
@@ -282,7 +281,7 @@ done:
 .proc play_vgm_new
 loop:
         ; read a command byte
-        jsr read_vgm_byte
+        read_vgm_byte
         ; dispatch the chosen command
 check_waitframe:
         cmp #WAITFRAME
