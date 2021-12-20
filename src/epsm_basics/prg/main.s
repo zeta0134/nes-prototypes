@@ -7,6 +7,8 @@
         .include "word_util.inc"
         .include "zeropage.inc"
 
+        .macpack longbranch
+
 .scope PRGLAST_E000
         .zeropage
 epsm_reg_scratch: .res 1
@@ -48,7 +50,8 @@ epsm_palette_final:
         sta PPUMASK
 .endmacro
 
-.proc increment_vgm_ptr
+.macro increment_vgm_ptr
+.scope
         inc16 vgm_ptr
         ; if we advanced past the end of the page, we need to 
         ; swap in the next page and reset the pointer
@@ -63,15 +66,15 @@ epsm_palette_final:
         sta vgm_ptr+1
         ; (no need to reset the low byte, it should already be $00)
 done:
-        rts
-.endproc
+.endscope
+.endmacro
 
 .macro read_vgm_byte
         ldy #0
         lda (vgm_ptr), y
-        pha ; preserve
-        jsr increment_vgm_ptr
-        pla ; un-preserve
+        tay ; preserve
+        increment_vgm_ptr
+        tya ; un-preserve
 .endmacro
 
 .proc init_vgm_player
@@ -184,7 +187,7 @@ done:
 
 .proc command_epsm_a0_write
         read_vgm_byte
-        beq done
+        jeq done
         sta counter ; command count
         ldx epsm_temp_command_index
 loop:
@@ -226,7 +229,7 @@ done:
 
 .proc command_epsm_a1_write
         read_vgm_byte
-        beq done
+        jeq done
         sta counter ; command count
         ldx epsm_temp_command_index
 loop:
