@@ -15,19 +15,32 @@ vgm_ptr: .res 2
 vgm_page: .res 1
 register_ptr: .res 2
 ptr: .res 2
+counter: .res 1
+
+bg_palette_buffer: .res 16
+bg_palette_dirty: .res 1
+
         .segment "RAM"
 nmi_counter: .byte $00
 
         .segment "VGM"
-        ;.include "../vgm/ponicanyon_zeta.asm"
+        .include "../vgm/ponicanyon_zeta.asm"
         ;.include "../vgm/rag_all_night_long_zeta.asm"
-        .include "../vgm/led_storm_name_entry.asm"
+        ;.include "../vgm/led_storm_name_entry.asm"
         .segment "PRGLAST_E000"
         .export start, nmi, irq
 
 epsm_nametable:
         .incbin "chr/epsm.nam"
-epsm_palette:
+epsm_palette_a:
+        .incbin "chr/epsma.pal"
+epsm_palette_b:
+        .incbin "chr/epsmb.pal"
+epsm_palette_c:
+        .incbin "chr/epsmc.pal"
+epsm_palette_d:
+        .incbin "chr/epsmd.pal"
+epsm_palette_final:
         .incbin "chr/epsm.pal"
 
 .macro debug_color flags
@@ -172,50 +185,84 @@ done:
 
 .proc command_epsm_a0_write
         jsr read_vgm_byte
-        tax ; command count
         beq done
+        sta counter ; command count
+        ldx epsm_temp_command_index
 loop:
-        ; read reg and data
+        ; read reg
         jsr read_vgm_byte
-        sta epsm_reg_scratch
+
+        ; LUT variant - 19 cycles
+        tay ; 2
+        lda a0_reg_high_lut, y ; 4
+        sta epsm_reg_high_buffer, x ; 4
+        lda epsm_low_nybble_lut, y ; 4
+        sta epsm_reg_low_buffer, x ; 4
+
+        ; now read data
         jsr read_vgm_byte
-        sta epsm_data_scratch
-        ; add it to the active EPSM buffer
-        epsm_queue_low_command epsm_reg_scratch, epsm_data_scratch
-        ; if the buffer is now full, insert a wait frame to clear it out
-        ; (this will screw with tempo, it's fine)
-        lda epsm_temp_command_index
-        cmp #$FE
+        tay ; 2
+        lda a0_data_high_lut, y ; 4
+        sta epsm_data_high_buffer, x ; 4
+        lda epsm_low_nybble_lut, y ; 4
+        sta epsm_data_low_buffer, x ; 4
+
+        ; advance!
+        inx
+
+        ; deal with buffer fills
+        cpx #$FE
         bne not_full
+        stx epsm_temp_command_index
         jsr command_waitframe
+        ldx #0
 not_full:
-        dex
+        dec counter
         bne loop
+finalize_buffer:
+        stx epsm_temp_command_index
 done:
         rts
 .endproc
 
 .proc command_epsm_a1_write
         jsr read_vgm_byte
-        tax ; command count
         beq done
+        sta counter ; command count
+        ldx epsm_temp_command_index
 loop:
-        ; read reg and data
+        ; read reg
         jsr read_vgm_byte
-        sta epsm_reg_scratch
+
+        ; LUT variant - 19 cycles
+        tay ; 2
+        lda a1_reg_high_lut, y ; 4
+        sta epsm_reg_high_buffer, x ; 4
+        lda epsm_low_nybble_lut, y ; 4
+        sta epsm_reg_low_buffer, x ; 4
+
+        ; now read data
         jsr read_vgm_byte
-        sta epsm_data_scratch
-        ; add it to the active EPSM buffer
-        epsm_queue_high_command epsm_reg_scratch, epsm_data_scratch
-        ; if the buffer is now full, insert a wait frame to clear it out
-        ; (this will screw with tempo, it's fine)
-        lda epsm_temp_command_index
-        cmp #$FE
+        tay ; 2
+        lda a1_data_high_lut, y ; 4
+        sta epsm_data_high_buffer, x ; 4
+        lda epsm_low_nybble_lut, y ; 4
+        sta epsm_data_low_buffer, x ; 4
+
+        ; advance!
+        inx
+
+        ; deal with buffer fills
+        cpx #$FE
         bne not_full
+        stx epsm_temp_command_index
         jsr command_waitframe
+        ldx #0
 not_full:
-        dex
+        dec counter
         bne loop
+finalize_buffer:
+        stx epsm_temp_command_index
 done:
         rts
 .endproc
@@ -295,14 +342,15 @@ loop:
 
 ; put the palette you want to load in ptr
 .proc load_bg_palette
-        set_ppuaddr #$3F00
         ldy #0
 loop:
         lda (ptr), y
-        sta PPUDATA
+        sta bg_palette_buffer, y
         iny
         cpy #16
         bne loop
+        lda #1
+        sta bg_palette_dirty
         rts
 .endproc
 
@@ -314,8 +362,9 @@ loop:
         jsr initialize_mmc3
 
         ; load some pretty test graphics
-        st16 ptr, epsm_palette
+        st16 ptr, epsm_palette_d
         jsr load_bg_palette
+
         st16 ptr, epsm_nametable
         set_ppuaddr #$2000
         jsr load_nametable
@@ -338,15 +387,25 @@ loop:
 
         ; should technically be safe to re-enable interrupts?
 
-; do epsm things
-        ; align with nmi
+        ; run through all 5 palettes. These encode a simple fade-in with a delay
+        jsr palette_fade_delay
+        st16 ptr, epsm_palette_c
+        jsr load_bg_palette
+        jsr palette_fade_delay
+        st16 ptr, epsm_palette_b
+        jsr load_bg_palette
+        jsr palette_fade_delay
+        st16 ptr, epsm_palette_a
+        jsr load_bg_palette
+        jsr palette_fade_delay
+        st16 ptr, epsm_palette_final
+        jsr load_bg_palette
+
+        ; make sure we are out of NMI before performing player init
         jsr wait_for_nmi
 
 
         jsr epsm_init
-        ;jsr load_asm
-        ;jsr zeta_test
-        ;jsr play_vgm
         jsr init_vgm_player
         jsr play_vgm_new
 
@@ -364,6 +423,15 @@ loop:
         rts
 .endproc
 
+.proc palette_fade_delay
+        ldx #5
+loop:
+        jsr wait_for_nmi
+        dex
+        bne loop
+        rts
+.endproc
+
 .proc irq
         ; do nothing
         rti
@@ -378,6 +446,29 @@ loop:
         pha
 
         inc nmi_counter
+        lda PPUSTATUS ; reset write latch
+
+        lda bg_palette_dirty
+        beq no_bg_pal_update
+
+        set_ppuaddr #$3F00
+        ldy #0
+bg_pal_loop:
+        lda bg_palette_buffer, y
+        sta PPUDATA
+        iny
+        cpy #16
+        bne bg_pal_loop
+        lda #0
+        sta bg_palette_dirty
+        sta PPUADDR
+        sta PPUADDR
+no_bg_pal_update:
+
+        ; set the scroll for the frame
+        lda #0
+        sta PPUSCROLL
+        sta PPUSCROLL
         
         ; do the sprite thing
         lda #$00

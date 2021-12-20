@@ -48,6 +48,7 @@ EPSM_SSG_ENVELOPE_HOLD      = %00000001
 .import epsm_data_high_buffer
 .importzp epsm_command_index, epsm_temp_command_index
 .import epsm_init, epsm_write_commands_4016
+.import a0_reg_high_lut, a1_reg_high_lut, a0_data_high_lut, a1_data_high_lut, epsm_low_nybble_lut
 
 ; 8 cycles when branch taken, 12 cycles when not, ONLY
 ; when addr is on the zero page
@@ -68,18 +69,29 @@ no_carry:
 .macro epsm_queue_low_command register, value
 .scope
     ldy epsm_temp_command_index
-    lda register
+
+    ; SLOW variant - 26 cycles
+    lda register ; 3
     ; isolate the high nybble, and add in the latch flags
-    and #$F0 
-    ora #(EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_LOW)
-    sta epsm_reg_high_buffer, y
+    and #$F0 ; 2
+    ora #(EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_LOW) ; 2
+    sta epsm_reg_high_buffer, y ; 4
     ; shift the low nybble into place
-    lda register
-    asl
-    asl
-    asl
-    asl
-    sta epsm_reg_low_buffer, y
+    lda register ; 3
+    asl ; 2
+    asl ; 2
+    asl ; 2
+    asl ; 2
+    sta epsm_reg_low_buffer, y ; 4
+
+    ; LUT variant - 19 cycles
+    ;ldx register ; 3
+    ;lda a0_reg_high_lut, x ; 4
+    ;sta epsm_reg_high_buffer, y ; 4
+    ;lda epsm_low_nybble_lut, x ; 4
+    ;sta epsm_reg_low_buffer, y ; 4
+
+
     ; do the same for data
     ldy epsm_temp_command_index
     lda value
@@ -94,6 +106,7 @@ no_carry:
     asl
     asl
     sta epsm_data_low_buffer, y
+
     inc epsm_temp_command_index
 .endscope
 .endmacro

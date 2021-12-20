@@ -24,6 +24,33 @@ epsm_data_low_buffer: .res 256
 
     .segment "PRGLAST_E000"
 
+a0_reg_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_LOW)
+.endrep
+
+a1_reg_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_HIGH)
+.endrep
+
+a0_data_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_LOW)
+.endrep
+
+a1_data_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_HIGH)
+.endrep
+
+epsm_low_nybble_lut:
+.repeat 256, count
+    .byte ((count & $0F) << 4)
+.endrep
+
+.export a0_reg_high_lut, a1_reg_high_lut, a0_data_high_lut, a1_data_high_lut, epsm_low_nybble_lut
+
 ; total cycle cost: 6
 .macro initialize_command_buffer
     lda #0                  ; 2
