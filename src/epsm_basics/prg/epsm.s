@@ -72,7 +72,7 @@ epsm_low_nybble_lut:
 ; 3.57 MHz - rep 7 (14 extra cycles)
 ; 8.00 MHz - rep 0 (0 extra cycles)
 .macro mesen_compat_delay
-.repeat 7
+.repeat 0
     nop
 .endrepeat
 .endmacro
