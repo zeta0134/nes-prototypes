@@ -26,11 +26,19 @@ bg_palette_dirty: .res 1
 nmi_counter: .byte $00
 
         .segment "VGM"
-        .include "../vgm/ponicanyon_zeta.asm"
+        ;.include "../vgm/ponicanyon_zeta.asm"
         ;.include "../vgm/rag_all_night_long_zeta.asm"
-        ;.include "../vgm/led_storm_name_entry.asm"
+        .include "../vgm/led_storm_name_entry.asm"
+
         .segment "PRGLAST_E000"
         .export start, nmi, irq
+
+vgm_title:
+        .asciiz "> VGM Player"
+vgm_artist:
+        .asciiz ""
+vgm_copyright:
+        .asciiz ""
 
 epsm_nametable:
         .incbin "chr/epsm.nam"
@@ -402,10 +410,38 @@ loop:
         jsr palette_fade_delay
         st16 ptr, epsm_palette_final
         jsr load_bg_palette
+        jsr wait_for_nmi
+
+        ; draw in the player strings, with a frame inbetween for good measure
+        set_ppuaddr #$2283
+        st16 ptr, vgm_title
+        jsr drawstring
+        set_ppuaddr #$2000
+        lda #0
+        sta PPUSCROLL
+        sta PPUSCROLL
+        jsr wait_for_nmi
+
+        set_ppuaddr #$22C3
+        st16 ptr, vgm_artist
+        jsr drawstring
+        set_ppuaddr #$2000
+        lda #0
+        sta PPUSCROLL
+        sta PPUSCROLL
+        jsr wait_for_nmi
+
+        set_ppuaddr #$2303
+        st16 ptr, vgm_copyright
+        jsr drawstring
+        set_ppuaddr #$2000
+        lda #0
+        sta PPUSCROLL
+        sta PPUSCROLL
+        jsr wait_for_nmi
 
         ; make sure we are out of NMI before performing player init
         jsr wait_for_nmi
-
 
         jsr epsm_init
         jsr init_vgm_player
@@ -431,6 +467,23 @@ loop:
         jsr wait_for_nmi
         dex
         bne loop
+        rts
+.endproc
+
+; toss the string you want to draw in ptr prior to calling
+; set PPUADDR to the location you want to begin
+; set PPUCTRL to a +1 increment
+.proc drawstring
+        ldy #0
+loop:
+        lda (ptr), y
+        beq done
+        clc
+        adc #(128 - 32)
+        sta PPUDATA
+        iny
+        jmp loop
+done:
         rts
 .endproc
 
@@ -479,9 +532,9 @@ no_bg_pal_update:
         sta OAM_DMA
         ; IMMEDIATELY process the command buffer. Cycle alignment matters!
         ;jsr epsm_write_commands_401x
-        debug_color (LIGHTGRAY | TINT_R)
+        ;debug_color (LIGHTGRAY | TINT_R)
         jsr epsm_write_commands_4016
-        debug_color LIGHTGRAY
+        ;debug_color LIGHTGRAY
 
 
         ; restore registers
