@@ -298,9 +298,9 @@ def print_frames(module):
 
 module = bamboo.read_module("ponicanyon.btm")
 
-#print_frames(module)
-#print_patterns(module)
 print_instrument_table(module)
 print_instruments(module)
 print_fm_patches(module)
+print_frames(module)
+print_patterns(module)
 
