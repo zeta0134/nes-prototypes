@@ -7,7 +7,8 @@
 
     .zeropage
 epsm_command_index: .res 1
-.exportzp epsm_command_index
+epsm_temp_command_index: .res 1
+.exportzp epsm_command_index, epsm_temp_command_index
 
     .segment "RAM"
 ; this almost certainly needs to be larger, but it'll do for now
@@ -22,6 +23,33 @@ epsm_data_low_buffer: .res 256
 .export epsm_data_high_buffer
 
     .segment "PRGLAST_E000"
+
+a0_reg_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_LOW)
+.endrep
+
+a1_reg_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_REG | EPSM_4016_A1_HIGH)
+.endrep
+
+a0_data_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_LOW)
+.endrep
+
+a1_data_high_lut:
+.repeat 256, count
+    .byte (count & $F0) | (EPSM_4016_LATCH | EPSM_4016_DATA | EPSM_4016_A1_HIGH)
+.endrep
+
+epsm_low_nybble_lut:
+.repeat 256, count
+    .byte ((count & $0F) << 4)
+.endrep
+
+.export a0_reg_high_lut, a1_reg_high_lut, a0_data_high_lut, a1_data_high_lut, epsm_low_nybble_lut
 
 ; total cycle cost: 6
 .macro initialize_command_buffer
@@ -44,7 +72,7 @@ epsm_data_low_buffer: .res 256
 ; 3.57 MHz - rep 7 (14 extra cycles)
 ; 8.00 MHz - rep 0 (0 extra cycles)
 .macro mesen_compat_delay
-.repeat 7
+.repeat 0
     nop
 .endrepeat
 .endmacro
