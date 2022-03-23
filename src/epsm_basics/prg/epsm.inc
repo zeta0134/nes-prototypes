@@ -6,6 +6,11 @@
 ;        ||||+---- A1 Status (0 = A1 is 0, 1 = A1 is 1)
 ;        ++++----- High nibble of data
 
+EPSM_EXP_A0_REG  = $401C
+EPSM_EXP_A0_DATA = $401D
+EPSM_EXP_A1_REG  = $401E
+EPSM_EXP_A1_DATA = $401F
+
 EPSM_4016_A1_LOW  = %00000000
 EPSM_4016_A1_HIGH = %00000100
 EPSM_4016_REG     = %00000000

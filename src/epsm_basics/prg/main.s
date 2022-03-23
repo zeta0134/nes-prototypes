@@ -18,6 +18,7 @@ vgm_page: .res 1
 register_ptr: .res 2
 ptr: .res 2
 counter: .res 1
+playback_active: .res 1
 
 bg_palette_buffer: .res 16
 bg_palette_dirty: .res 1
@@ -26,9 +27,9 @@ bg_palette_dirty: .res 1
 nmi_counter: .byte $00
 
         .segment "VGM"
-        ;.include "../vgm/ponicanyon_zeta.asm"
+        .include "../vgm/ponicanyon_zeta.asm"
         ;.include "../vgm/rag_all_night_long_zeta.asm"
-        .include "../vgm/led_storm_name_entry.asm"
+        ;.include "../vgm/led_storm_name_entry.asm"
 
         .segment "PRGLAST_E000"
         .export start, nmi, irq
@@ -193,7 +194,41 @@ done:
         rts  
 .endproc
 
-.proc command_epsm_a0_write
+.proc command_epsm_a0_write_ext
+        read_vgm_byte
+        jeq done
+        sta counter ; command count
+loop:
+        read_vgm_byte
+        sta EPSM_EXP_A0_REG
+        read_vgm_byte
+        sta EPSM_EXP_A0_DATA
+        ; TODO: If necessary, add some delay here
+
+        dec counter
+        bne loop
+done:
+        rts
+.endproc
+
+.proc command_epsm_a1_write_ext
+        read_vgm_byte
+        jeq done
+        sta counter ; command count
+loop:
+        read_vgm_byte
+        sta EPSM_EXP_A1_REG
+        read_vgm_byte
+        sta EPSM_EXP_A1_DATA
+        ; TODO: If necessary, add some delay here
+
+        dec counter
+        bne loop
+done:
+        rts
+.endproc
+
+.proc command_epsm_a0_write_4016
         read_vgm_byte
         jeq done
         sta counter ; command count
@@ -235,7 +270,7 @@ done:
         rts
 .endproc
 
-.proc command_epsm_a1_write
+.proc command_epsm_a1_write_4016
         read_vgm_byte
         jeq done
         sta counter ; command count
@@ -307,12 +342,14 @@ check_apu_write:
 check_epsm_a0_write:
         cmp #EPSM_A0_WRITE
         bne check_epsm_a1_write
-        jsr command_epsm_a0_write
+        ;jsr command_epsm_a0_write_4016
+        jsr command_epsm_a0_write_ext
         jmp loop
 check_epsm_a1_write:
         cmp #EPSM_A1_WRITE
         bne check_s5b_write
-        jsr command_epsm_a1_write
+        ;jsr command_epsm_a1_write_4016
+        jsr command_epsm_a1_write_ext
         jmp loop
 check_s5b_write:
         cmp #S5B_WRITE
@@ -368,6 +405,9 @@ loop:
         lda #$00
         sta PPUMASK ; disable rendering
         sta PPUCTRL ; and NMI
+
+        lda #0
+        sta playback_active ; disable the busy parts of NMI during init
 
         jsr initialize_mmc3
 
@@ -442,6 +482,10 @@ loop:
 
         ; make sure we are out of NMI before performing player init
         jsr wait_for_nmi
+
+        ; Okay *now* do the busy parts
+        lda #$80
+        sta playback_active ; disable the busy parts of NMI during init
 
         jsr epsm_init
         jsr init_vgm_player
@@ -524,19 +568,30 @@ no_bg_pal_update:
         lda #0
         sta PPUSCROLL
         sta PPUSCROLL
+
+        bit playback_active
+        jpl exit_nmi
+
         
         ; do the sprite thing
         lda #$00
         sta OAMADDR
         lda #$02
         sta OAM_DMA
+
+        ; we are now cycle aligned; wait a bunch so that our debug timing is in the visible frame,
+        ; in an alignment-preserving manner
+        .repeat 1000
+        nop
+        .endrepeat
+
         ; IMMEDIATELY process the command buffer. Cycle alignment matters!
-        ;jsr epsm_write_commands_401x
-        ;debug_color (LIGHTGRAY | TINT_R)
+        debug_color (LIGHTGRAY | TINT_R)
         jsr epsm_write_commands_4016
-        ;debug_color LIGHTGRAY
+        debug_color LIGHTGRAY
 
 
+exit_nmi:
         ; restore registers
         pla
         tay
