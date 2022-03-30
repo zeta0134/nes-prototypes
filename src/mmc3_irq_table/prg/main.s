@@ -340,6 +340,11 @@ loop:
         sta PPUMASK ; disable rendering
         sta PPUCTRL ; and NMI
 
+        ; Clear out the rest of main memory
+        st16 R0, ($0200)
+        st16 R2, ($0600)
+        jsr clear_memory
+
         jsr initialize_mmc3
         jsr init_oam
 
@@ -599,6 +604,23 @@ no_camera_wrap:
         pha
         jmp (ptr)
 return_from_indirect:
+        rts
+.endproc
+
+; Arguments:
+; R0 - starting address (16bit)
+; R2 - length (16bit)
+.proc clear_memory
+        ldy #0
+        ; decrement once to start, since we exit when the counter reaches -1
+        dec16 R2
+loop:
+        lda #0
+        sta (R0),y
+        inc16 R0
+        dec16 R2 ; sets A to 0xFF
+        cmp R2+1 ; check if the high byte has rolled around to 0xFF; if so, terminate the loop
+        bne loop
         rts
 .endproc
 
