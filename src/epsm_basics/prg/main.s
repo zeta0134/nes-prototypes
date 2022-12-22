@@ -27,8 +27,8 @@ bg_palette_dirty: .res 1
 nmi_counter: .byte $00
 
         .segment "VGM"
-        .include "../vgm/ponicanyon_zeta.asm"
-        ;.include "../vgm/rag_all_night_long_zeta.asm"
+        ;.include "../vgm/ponicanyon_zeta.asm"
+        .include "../vgm/rag_all_night_long_zeta.asm"
         ;.include "../vgm/led_storm_name_entry.asm"
 
         .segment "PRGLAST_E000"
@@ -187,6 +187,7 @@ loop:
         sta register_ptr
         ; data
         read_vgm_byte
+        ldy #0
         sta (register_ptr), y
         dex
         bne loop
@@ -431,6 +432,10 @@ loop:
         ; disable APU-based interrupt sources
         lda #$40
         sta $4017
+
+        ; enable all APU channels (some VGMs rely on this)
+        lda #$0F
+        sta $4015
 
         ; also disable MMC3 interrupts
         sta MMC3_IRQ_DISABLE
