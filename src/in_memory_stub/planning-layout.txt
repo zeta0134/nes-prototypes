@@ -1,0 +1,73 @@
+High Level Overview:
+--------------------
+
+This is an NROM stub designed to copy a 2kB work image into the internal RAM in the NES console, then
+immediately jump to that work image. The idea is to continue running out of main memory while the user
+switches the cartridge, which can then be driven with a small test program.
+
+Memory Layout (highly wip):
+---------------------------
+
+$000 - $01F: Zeropage Scratch, 32 bytes
+$020 - $1BF: Work RAM, 416 bytes
+$1C0 - $1FF: Call Stack, 64 bytes
+$200 - $3FF: Font data, 1bpp (64 chars uncompressed, 73 at 8x7, 85 at 8x6)
+$400 - $7FF: Program data, 1024 bytes
+
+Note: these will all be named segments in the linker script. Notably, the RAM
+segments are not copied, so they can be used freely by the NROM loader during
+initial setup
+
+PPU Sync Strategy:
+------------------
+
+We can't use NMI or IRQ because we have no PRG ROM, so we'll need to get creative. We CAN
+use PPUSTATUS, and that means we have the vblank flag (unreliable) and the sprite overflow
+flag (reliable with setup). OAM and palette memory function as normal, but we can't rely
+on nametable contents or pattern data, as these are cart-supplied and might be completely
+garbage junk.
+
+During init, in this order:
+- setup OAM DMA with a 9-sprite overflow on scanline 239
+  - presumably we need to write this to a RAM page, but if we can do it in software and still
+    hit our performance target then that might give us more flexibility
+- disable rendering
+- manually sync to vblank using the VBLANK flag (might false negative but should eventually succeed)
+- perform OAM DMA to initialize sprite table
+- set PPUSCROLL to 0,0
+- enable rendering, wait for vblank
+- jump to game loop
+
+Wait for vblank:
+- wait for sprite overflow to clear, indicating that we've left the vblank period
+  - if our game loop took longer than 2273 cycles, this should happen right away
+  - this also handles lag frames gracefully
+- wait for sprite overflow to be set, indicating that we're somewhere in scanline 239
+- wait a tiny bit longer until we're somewhere in scanline 240, then exit
+
+Setup OAM (without OAM DMA, to save on RAM):
+write_oam:    ; 6 (implied JSR)
+  lda #0      ; 2
+  sta OAMADDR ; 4
+  ldx #55     ; 2
+  lda #$FF    ; 2
+padding_loop:    ; (21 per tile + 2 to exit = 1157)
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  dex         ; 2
+  bne padding_loop ; 3t, 2nt
+  ldx #9      ; 2
+  lda #$EF    ; 2
+overflow_loop:  ; (21 per tile + 2 to exit = 191)
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  sta OAMDATA ; 4
+  dex         ; 2
+  bne overflow_loop ; 3t, 2nt
+  rts         ; 6
+; total runtime: 1374 cycles
+; total code size: 44 bytes
+

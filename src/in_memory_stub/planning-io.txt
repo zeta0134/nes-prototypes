@@ -1,0 +1,144 @@
+FamiCom port logic:
+-------------------
+
+The initial target will be the Famicom's DA-15 connector, which seems to give us the following
+pins for access by the program:
+
+OUT0, OUT1, OUT2: write $4016
+D1, D2, D3, D4: read $4017
+/OE2: briefly active while reading $4017
+
+The other pins are connected to the internal controller ports, but if we ignore D0, we can
+reliably communicate with the external device, which in this case should be an Arduino with
+all 7 pins connected to its own GPIO pins, to bit-bang a protocol.
+
+The goal is for the arduino (through a PC program, ultimately) to send commands to the Famicom,
+which then responds by performing some action or transferring data back to the arduino (which can
+send that data to the PC program)
+
+Of course the Famicom is in full control of the relevant timing signals, so it needs to be
+driving the interaction.
+
+Reading Bytes:
+--------------
+
+Each time we read from $4017, the hardware automatically pulses /OE2, so we can use this as
+a timing signal. The data on D1-D4 is one nybble of data, and the arduino can use /OE2 going
+inactive (high?) to acknowledge that it has been read, and place the next nybble on the pins.
+
+On the 6502 side then, just read $4017 twice, and assemble the two nybbles into a complete byte.
+
+On the arduino side, we'll need to maintain an output buffer, split those bytes into nybbles, and
+alternate making their upper/lower halves available for reading
+
+Concern: what happens if the 6502 program gets out of sync somehow, and is reading low nybbles
+when it thinks it is reading high nybbles? Can we reset the protocol with $4016 writes?
+Concern: what do we have the arduino provide when the buffer is empty?
+
+Writing Bytes:
+--------------
+
+So there's OUT0, but that is pulsed when reading standard controllers which we probably want to
+not break. So that leaves OUT1 and OUT2, along with the /OE1 signal on reads but not writes.
+... messy.
+
+Okay so... let's use /OE1 to **reset** the write logic. Then we can repeatedly write to
+OUT1+OUT2 with the data, using OUT1 as a clock, and OUT2 as a single bit. With that in mind,
+to write a single bite:
+
+- read $4016 to reset the byte writer
+  - why don't we have this also reset the high/low nybble for reading?
+- for each bit:
+  - write with OUT1 high, and OUT2 to the desired bit
+  - write again with OUT1 low (OUT2 is irrelevant)
+
+Command Protocol
+----------------
+
+The Famicom needs to drive the action, even though the Arduino is technically remotely controlling
+it. The Famicom cooperates with that control; if it ever breaks and stops reading commands from the
+arduino, we get stuck and have to reset.
+
+The Famicom has a tiny command protocol to facilitate this polling, and also to facilitate the low
+level transfer of data in both directions. This protocol works with full bytes, so the above functions
+will carry these bytes back and forth.
+
+Each command begins with a $4016 read, which resets all of the buffers, followed by a command byte. For
+data transfers, this may optionally be followed by a length byte, and then the payload data. In all cases,
+following the transfer of this command, the Famicom will expect to read (rather quickly) a reply from the
+arduino. We'll denote the whole set as we go.
+
+CMD_SIGNATURE - Verifies that the arduino is connected and working properly
+Response: the bytes $01 $34
+Note: This will generally be the first command run once the program has finished setup. The famicom
+  will repeatedly execute this command and stall until the device connects.
+
+CMD_POLL - Asks the arduino for the next remote control command in its buffer
+Response: the command byte, followed by any command-specific parameters
+Note: a special command indicates that the command buffer is empty
+
+CMD_RECV_DATA: Asks the arduino for the contents of its write data buffer
+Response: the bytes of the data buffer in order, followed by a 16bit checksum
+Note: things like the destination address and transfer type (VRAM, etc) are set up by commands
+Note: if checksum verification fails, the program may (repeatedly) repeat this command to
+attempt the transfer again
+
+CMD_RECV_ACK: Tells the arduino that the read transfer was successful
+Response: $80 (ack)
+Note: after acknowledging this command, the arduino will clear the contents of the buffer, and
+usually signal to the controlling program on the PC that additional commands may be sent.
+
+CMD_SEND_DATA: Send arbitrary data to the arduino's write buffer
+Payload: 1 byte length, followed by up to 256 bytes of data, followed by 16bit checksum
+Response: $FF (error, please retransmit) or $80 (ack)
+
+CMD_SEND_READY: Asks the arduino if it is ready for more data
+Response: $FF (not ready, please wait) or $80 (ack, please continue)
+Note: the arduino will use this when it needs to send the data to the PC. Once the PC
+has acknowledged successful receipt of the data, the arduino clears its own write buffer
+and then the Famicom is free to send it an additional payload. During large transfers, this dance
+will occur many times.
+
+Remote Control Commands
+-----------------------
+
+The above describes a low-level protocol to read and write arbitrary data to and from the arduion,
+and to request commands (and their parameters) which could perform any number of actions. Here, we
+describe a minimal set of useful commands that should allow a more sophisticated control program
+on the PC to more or less drive the whole system remotely. 
+
+We may expand on this later, but these commands **do** need to squeeze themselves into about 1k of RAM,
+so we have significant limits on code size to worry about.
+
+
+NO_COMMAND - Dummy response to CMD_POLL when idle. No paramaters, program waits at least a full frame
+before polling again.
+
+WRITE_CPU - Address (16bit), Value (8bit)
+- Writes a single 8bit value to the CPU address space
+- Ideal for tickling registers remotely, though mind that lag in the arduino might make the timing
+  a bit unreliable for things like music
+
+BULK_WRITE_CPU / BULK_WRITE_PPU - Adddress (16bit), Length (8bit)
+- Before sending this command, the arduino's write buffer should be filled with the data, as the famicom
+  program will expect to start reading it right away
+- Up to 256 bytes of data can be sent in a single command; for larger transfers, use several of these
+  commands in a row
+
+BULK_READ_CPU / BULK_READ_PPU - Address (16bit), Length (8bit)
+- Compliments the above commands
+- PPU reading is not safe while DPCM is playing; be sure to disable this before attempting, otherwise
+  the data can be corrupted
+- Since we need the complexity of the write buffer, there is no single-byte short variant of this. Use
+  a length of 1 when required.
+
+CALL_SUBROUTINE - Address (16bit)
+- Does what it says on the tin
+- The arduino will assume the program is busy until the next time it polls for a command
+- Intentionally stupidly simple: 
+  - no parameters, put those in RAM somewhere with a WRITE_CPU command if you need them
+  - no return value, read them out of RAM with a READ_CPU command as required
+
+
+
+
