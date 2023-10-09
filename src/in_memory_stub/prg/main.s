@@ -8,10 +8,17 @@
         .include "word_util.inc"
         .include "zeropage.inc"
 
+        .segment "CHR0"
+        .incbin "4K_numberedTiles.chr"
+        .segment "CHR1"
+        .incbin "4K_numberedTiles.chr"
+
         .zeropage
 ; setup a heartbeat: we'll flash the BG color between two things
 global_bg_color: .res 1
 global_bg_counter: .res 1
+tile_base: .res 1
+oam_cycle_counter: .res 1
 
         .segment "RAMSTUB"
         .export start
@@ -76,6 +83,48 @@ second_loop:
         rts
 .endproc
 
+.proc clear_oam
+        ; clear just the first 55 sprites, writing only their Y position
+        lda #$FF
+        ldx #(54*4)
+loop:
+        sta $0200, x
+        .repeat 4
+        dex
+        .endrepeat
+        bne loop
+        rts
+.endproc
+
+; tile offset in A
+.proc draw_demo_oam_strip
+TileBase := R0
+        sta TileBase
+        ldx #0 ; tile index
+loop:
+        clc
+        txa ; 0, 4, 8, 12...
+        lsr ; 0, 2, 4, 6...
+        lsr ; 0, 1, 2, 3...
+        adc TileBase
+        sta $0200 + $01, x ; tile id
+        txa ; 0, 4, 8, 12...
+        asl ; 0, 8, 16, 24...
+        clc
+        adc #32 ; base Y offset
+        sta $0200 + $00, x ; y position
+        lda #32 ; base X offset
+        sta $0200 + $03, x ; x position
+        lda #0
+        sta $0200 + $02, x ; attributes
+        .repeat 4
+        inx
+        .endrepeat
+        cpx #(16 * 4)
+        bne loop
+        rts
+.endproc
+
 ; waits for either a sprite-overflow signal or a vblank flag signal. Once set up,
 ; sprite overflow should be slightly more reliable, but vblank is checked as a fallback; if
 ; we miss sprite overflow somehow, or rendering is disabled, we'll occasionally skip frames. We
@@ -97,6 +146,32 @@ delay:
         dex
         bne delay
         ; done
+        rts
+.endproc
+
+.proc palette_heartbeat
+        dec global_bg_counter
+        bne no_bg_change
+        lda global_bg_color
+        eor #$0C ; flip between black and dark purple
+        sta global_bg_color
+        lda #60
+        sta global_bg_counter
+no_bg_change:
+        rts
+.endproc
+
+.proc oam_tileid_cycle
+        dec oam_cycle_counter
+        bne no_change
+        lda tile_base
+        clc
+        adc #16
+        sta tile_base
+        jsr draw_demo_oam_strip
+        lda #60
+        sta oam_cycle_counter
+no_change:
         rts
 .endproc
 
@@ -134,17 +209,17 @@ delay:
         lda #$0F
         sta global_bg_color
 
+        lda #0
+        sta tile_base
+        jsr draw_demo_oam_strip
+        lda #60
+        sta oam_cycle_counter
+
         ; all done
 gameloop:
         ; any game loop logic would go here
-        dec global_bg_counter
-        bne no_bg_change
-        lda global_bg_color
-        eor #$0C ; flip between black and dark purple
-        sta global_bg_color
-        lda #60
-        sta global_bg_counter
-no_bg_change:
+        jsr palette_heartbeat
+        jsr oam_tileid_cycle
 
         ; now we wait for, and then do vblank things
         jsr wait_for_vblank_ish

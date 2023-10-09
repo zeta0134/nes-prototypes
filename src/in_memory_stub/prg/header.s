@@ -7,8 +7,8 @@
         .byte "NES", $1a
         .byte $02               ; 2x 16KB PRG-ROM banks = 32 KB total
         .byte $01               ; 1x 8KB CHR-ROM banks = 8 KB total
-        .byte $42, $00          ; Mapper 4 (MMC3) w/ battery-backed RAM
-        .byte $01               ; 8k of PRG RAM
+        .byte $00, $00          ; Mapper 0 (NROM) w/ battery-backed RAM
+        .byte $00               ; 8k of PRG RAM
         .byte $00               ;
         .byte $00
         .byte $00

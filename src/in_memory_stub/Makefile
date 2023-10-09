@@ -28,6 +28,9 @@ clean:
 run: dir $(ROM_NAME)
 	rusticnes-sdl $(ROM_NAME)
 
+everdrive: dir $(ROM_NAME)
+	mono vendor/edlink-n8.exe $(ROM_NAME)
+
 $(ROM_NAME): $(SOURCEDIR)/stub.cfg $(O_FILES)
 	ld65 -m $(BUILDDIR)/map.txt --dbgfile $(DBG_NAME) -o $@ -C $^
 
