@@ -19,6 +19,8 @@ global_bg_color: .res 1
 global_bg_counter: .res 1
 tile_base: .res 1
 oam_cycle_counter: .res 1
+debug_sprite_palette: .res 1
+current_output_sprite: .res 1
 
         .segment "RAMSTUB"
         .export start
@@ -175,6 +177,165 @@ no_change:
         rts
 .endproc
 
+; making this a function is overkill, but just for consistency
+.proc reset_exp_latch
+        lda $4016
+        rts
+.endproc
+
+; intentionally slow down the protocol at various points, so the arduino
+; can keep up
+.proc burn_some_time
+        .repeat 16
+        nop
+        .endrepeat
+        rts
+.endproc
+
+; result in A, bytes read in X
+; (this function only reads up to 1 byte, but X may range from 0-15)
+; If X=0, A=undefined
+.proc read_byte
+ScratchByte := R0
+        ; first, initialize the port and make sure it's in a clean state
+        lda $4016
+
+        jsr burn_some_time
+
+        ; After doing this, the first nybble read from $4017 should tell
+        ; us the length of the buffer
+        lda $4017 ; length in 000xxxx0
+        and #%00011110
+        lsr
+        tax
+        ; if this is zero, there are no bytes to read. We're done!
+        beq done
+        ; if this is greater than 7, *also* discard the byte. The arduino likes
+        ; to report 0x8 here when it's resetting / uploading a new program, which
+        ; is very annoying, so discard those invalid bytes if we get them here
+        cpx #8
+        bcs done
+
+        jsr burn_some_time
+        ; read both nybbles of a single byte from the buffer
+        ; low nybble first:
+        lda $4017
+        and #%00011110
+        lsr
+        sta ScratchByte
+        jsr burn_some_time
+        lda $4017
+        and #%00011110
+        .repeat 3
+        asl
+        .endrepeat
+        ora ScratchByte
+done:
+        rts
+.endproc
+
+; byte to write goes in A
+.proc write_byte
+ScratchByte := R0
+Counter := R1
+        sta ScratchByte
+
+        ; first, initialize the port and make sure it's in a clean state
+        lda #0
+        sta $4016
+        ; reading $4016 resets the high/low latch, and also resets the next bit to 0
+        ; (this helps to clean up old state if we restarted the program or had a transmission error)
+        lda $4016
+
+        lda #8
+        sta Counter
+loop:
+        lda #%00000001
+        lsr ScratchByte
+        rol
+        asl ; A now contains 000001x0
+        sta $4016
+        jsr burn_some_time
+        and #%00000011
+        sta $4016
+        jsr burn_some_time
+        dec Counter
+        bne loop
+        rts
+.endproc
+
+; byte to display in A, sprite number in X
+.proc debug_display_sprite
+        pha
+        txa
+        .repeat 2
+        asl
+        .endrepeat
+        tax
+        pla
+        sta $0201, x
+        lda debug_sprite_palette
+        sta $0202, x
+
+        rts
+.endproc
+
+.proc debug_cycle_palette
+        clc
+        lda debug_sprite_palette
+        adc #1
+        and #%00000011
+        sta debug_sprite_palette
+
+        ldx #0
+loop:
+        sta $0200 + $2, x
+        inx
+        inx
+        inx
+        inx
+        cpx #(16 * 4)
+        bne loop
+
+        rts
+.endproc
+
+; borrow the palette counter for now, it's fine
+.proc debug_heartbeat
+        dec global_bg_counter
+        bne no_action
+        jsr debug_cycle_palette
+        lda #60
+        sta global_bg_counter
+no_action:
+        rts
+.endproc
+
+.proc debug_echoply
+TempStash := R15
+        jsr read_byte
+        cpx #0
+        beq done
+        ; A contains the byte we just read; multiply it by 2,
+        ; then send it back out the pipe
+        sta TempStash
+        asl
+        ; debug: send a fixed value instead!
+        lda #$13
+        jsr write_byte
+        ; while we're in here, let's also write that byte to the
+        ; output buffer, so we can see what we're doing onscreen
+        lda TempStash
+        ldx current_output_sprite
+        jsr debug_display_sprite
+        inc current_output_sprite
+        lda current_output_sprite
+        and #$0F
+        sta current_output_sprite
+done:
+        rts
+.endproc
+
 ; we can't use a real NMI, but we still have every-vblank (ish) tasks, those go here
 ; notably this will not be a reliably lag-free timing signal, but we have to just deal
 ; with that
@@ -211,6 +372,7 @@ no_change:
 
         lda #0
         sta tile_base
+        sta debug_sprite_palette
         jsr draw_demo_oam_strip
         lda #60
         sta oam_cycle_counter
@@ -218,8 +380,9 @@ no_change:
         ; all done
 gameloop:
         ; any game loop logic would go here
-        jsr palette_heartbeat
-        jsr oam_tileid_cycle
+        jsr debug_heartbeat
+        jsr debug_echoply
+
 
         ; now we wait for, and then do vblank things
         jsr wait_for_vblank_ish

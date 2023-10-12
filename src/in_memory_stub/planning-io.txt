@@ -51,6 +51,7 @@ to write a single bite:
 - for each bit:
   - write with OUT1 high, and OUT2 to the desired bit
   - write again with OUT1 low (OUT2 is irrelevant)
+ - once the last bit is written, the arduino accepts the byte and behaves accordingly
 
 Command Protocol
 ----------------
@@ -68,19 +69,23 @@ data transfers, this may optionally be followed by a length byte, and then the p
 following the transfer of this command, the Famicom will expect to read (rather quickly) a reply from the
 arduino. We'll denote the whole set as we go.
 
+Note: the program should generally always read all command/response bytes
+Note: if the program continues reading more response bytes, the arduino should respond with $00
+
 CMD_SIGNATURE - Verifies that the arduino is connected and working properly
 Response: the bytes $01 $34
 Note: This will generally be the first command run once the program has finished setup. The famicom
   will repeatedly execute this command and stall until the device connects.
 
 CMD_POLL - Asks the arduino for the next remote control command in its buffer
-Response: the command byte, followed by any command-specific parameters
+Response: the bytes in the command buffer, or NO_COMMAND (repeatedly)
 Note: a special command indicates that the command buffer is empty
+NOTE: I think this should actually be more like "switch to the command/response buffer"
 
-CMD_RECV_DATA: Asks the arduino for the contents of its write data buffer
-Response: the bytes of the data buffer in order, followed by a 16bit checksum
-Note: things like the destination address and transfer type (VRAM, etc) are set up by commands
-Note: if checksum verification fails, the program may (repeatedly) repeat this command to
+CMD_RECV_DATA: Switches to the start of the recv buffer
+Response: the bytes of the data buffer in order
+Note: things like the destination address and transfer type (VRAM, etc) and checksum are set up by commands
+Note: if verification fails, the program may (repeatedly) repeat this command to
 attempt the transfer again
 
 CMD_RECV_ACK: Tells the arduino that the read transfer was successful
@@ -88,9 +93,9 @@ Response: $80 (ack)
 Note: after acknowledging this command, the arduino will clear the contents of the buffer, and
 usually signal to the controlling program on the PC that additional commands may be sent.
 
-CMD_SEND_DATA: Send arbitrary data to the arduino's write buffer
-Payload: 1 byte length, followed by up to 256 bytes of data, followed by 16bit checksum
-Response: $FF (error, please retransmit) or $80 (ack)
+CMD_SEND_DATA: Send data to the send buffer
+Payload: up to 256 bytes of data (sets length as it goes)
+Response: $xx (number of bytes transferred)
 
 CMD_SEND_READY: Asks the arduino if it is ready for more data
 Response: $FF (not ready, please wait) or $80 (ack, please continue)
@@ -111,34 +116,34 @@ We may expand on this later, but these commands **do** need to squeeze themselve
 so we have significant limits on code size to worry about.
 
 
-NO_COMMAND - Dummy response to CMD_POLL when idle. No paramaters, program waits at least a full frame
+[$00] NO_COMMAND - Dummy response to CMD_POLL when idle. No paramaters, program waits at least a full frame
 before polling again.
 
-WRITE_CPU - Address (16bit), Value (8bit)
+[$01] WRITE_CPU - Address (16bit), Value (8bit)
 - Writes a single 8bit value to the CPU address space
 - Ideal for tickling registers remotely, though mind that lag in the arduino might make the timing
   a bit unreliable for things like music
 
-BULK_WRITE_CPU / BULK_WRITE_PPU - Adddress (16bit), Length (8bit)
+[$02] BULK_WRITE_CPU / BULK_WRITE_PPU - Adddress (16bit), Length (8bit)
 - Before sending this command, the arduino's write buffer should be filled with the data, as the famicom
   program will expect to start reading it right away
 - Up to 256 bytes of data can be sent in a single command; for larger transfers, use several of these
   commands in a row
 
-BULK_READ_CPU / BULK_READ_PPU - Address (16bit), Length (8bit)
+[$03] BULK_READ_CPU / BULK_READ_PPU - Address (16bit), Length (8bit)
 - Compliments the above commands
 - PPU reading is not safe while DPCM is playing; be sure to disable this before attempting, otherwise
   the data can be corrupted
 - Since we need the complexity of the write buffer, there is no single-byte short variant of this. Use
   a length of 1 when required.
 
-CALL_SUBROUTINE - Address (16bit)
+[$04] CALL_SUBROUTINE - Address (16bit)
 - Does what it says on the tin
 - The arduino will assume the program is busy until the next time it polls for a command
 - Intentionally stupidly simple: 
   - no parameters, put those in RAM somewhere with a WRITE_CPU command if you need them
   - no return value, read them out of RAM with a READ_CPU command as required
 
-
+(anything above this is reserved; if not understood, the program will take no action and may desync!)
 
 
