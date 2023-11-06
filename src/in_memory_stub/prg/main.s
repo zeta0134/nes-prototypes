@@ -265,6 +265,7 @@ done:
         jsr read_byte_with_retries
         rts        
 .endproc
+.export read_byte
 
 ; byte to write goes in A
 .proc write_byte
@@ -295,6 +296,7 @@ loop:
         bne loop
         rts
 .endproc
+.export write_byte
 
 ; byte to display in A, sprite number in X
 .proc debug_display_sprite
@@ -352,6 +354,10 @@ CommandPtr := R1
         cpx #0
         beq no_command
         sta CommandByte
+
+        ; DEBUG: if we read a byte at ALL, do a palette cycle
+        sta $200 + $1
+        jsr debug_cycle_palette
         
         lda connection_established
         bne all_commands_allowed
@@ -394,12 +400,14 @@ command_table:
         jsr read_byte
         cpx #0
         beq done
+        sta $204 + $1
         cmp #$01
         bne done
 
         jsr read_byte
         cpx #0
         beq done
+        sta $208 + $1
         cmp #$34
         bne done
 
@@ -611,7 +619,9 @@ loop:
         ; all done
 gameloop:
         ; any game loop logic would go here
-        jsr debug_heartbeat
+        ;jsr debug_heartbeat
+        ;jsr debug_cycle_palette
+
         jsr process_commands
 
         ; now we wait for, and then do vblank things
