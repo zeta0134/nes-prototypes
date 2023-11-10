@@ -94,9 +94,72 @@ class Famicom:
             page_bytes.append(data_byte)
         return page_bytes
 
-    def write_cpu(self, address, data):
+
+    def transfer_block(self, address, data):
+        expected_checksum = crc16func(bytes(data))
         for i in range(0, len(data)):
             self.write_byte_cpu(address + i, data[i])
+        actual_checksum = self.checksum_region(address, len(data))
+        if expected_checksum != actual_checksum:
+            print("checksum mismatch at address ${}, retrying once...")
+            for i in range(0, len(data)):
+                self.write_byte_cpu(address + i, data[i])
+            actual_checksum = self.checksum_region(address, len(data))
+        return expected_checksum == actual_checksum
+
+    def upload(self, address, payload):
+        # for arduino reasons, we can't blindly stream data into the write buffer
+        # without occasionally waiting for the remote end to finish processing it.
+        # to facilitate this, we'll break the data up BLOCK_SIZE bytes at a time, and do
+        # a checksum inbetween blocks, which mostly serves to force a resync and
+        # a buffer fill, but also lets us retry a transfer if necessary
+
+        BLOCK_SIZE = 64
+
+        expected_checksum = crc16func(bytes(payload))
+        for i in range(0, len(payload), BLOCK_SIZE):
+            block = payload[i:i+BLOCK_SIZE]
+            # print("debug: transferring block", bytes(block))
+            self.transfer_block(address + i, block)
+        reported_checksum = self.checksum_region(address, len(payload))
+        return expected_checksum == reported_checksum
+
+    def download(self, address, length):
+        # this convenience function transfers a large segment of memory from the famicom
+        # all in one go. we divide the transfer into whole pages for speed, and then truncate
+        # to the requested length
+        first_page = (address & 0xFF00) >> 8
+        last_page = ((address+length-1) & 0xFF00) >> 8
+        # maybe don't try to read past the end of memory?
+        if last_page < first_page:
+            print("invalid download range requested, bailing")
+            return []
+        raw_page_data = []
+        for page in range(first_page, last_page+1):
+            page_bytes = self.read_page_cpu(page)
+            raw_page_data = raw_page_data + page_bytes
+        # now trim the data to the requested region
+        ltrim_amount = address - (first_page << 8)
+        ltrimmed_data = raw_page_data[ltrim_amount:]
+        trimmed_data = ltrimmed_data[0:length]
+        return trimmed_data
+
+    def rpc(self, proc_addr, arguments=[], num_results=0):
+        # this is a VERY low level, raw RPC implementation. Up to 8
+        # bytes may be passed in as arguments, and up to 8 bytes will
+        # be returned as a response if requested. For larger data transfers,
+        # of course the called code can write to arbitrary RAM to be dumped
+        # out separately.
+
+        ARG_BASE = 0x0080
+        RETURN_BASE = 0x0090
+        for i in range(0, len(arguments)):
+            self.write_byte_cpu(ARG_BASE+i, arguments[i])
+        self.call_subroutine(proc_addr)
+        results = []
+        for i in range(0, num_results):
+            results.append(self.read_byte_cpu(RETURN_BASE+i))
+        return results
 
 
 

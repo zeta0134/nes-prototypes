@@ -16,18 +16,8 @@ if famicom.open():
     print("Signature verified! We're in business!")
     print("Proceeding to dump memory region from 0xE000 - 0xFFFF")
 
-    data_dump = []
-    #for cpu_addr in range(0xE000, 0xFFFF + 1):
-    #    raw_byte = cmd_read_byte_cpu(cpu_addr)
-    #    # print(f"From address ${cpu_addr:04X} got byte ${raw_byte:02X}")
-    #    data_dump.append(raw_byte)
-    #    if cpu_addr % 0x100 == 0:
-    #        print(f"{cpu_addr:04X}...")
-    for page in range(0xE0, 0xFF + 1):
-        print(f"Reading page: ${page:02X}00...")
-        page_bytes = famicom.read_page_cpu(page)
-        data_dump = data_dump + page_bytes
-    print("Dump completed, writing to file!")
+    data_dump = famicom.download(0xE000, 0x2000)
+
     with open("out.dump.bin", "wb") as outfile:
         outfile.write(bytes(data_dump))
 

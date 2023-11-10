@@ -450,12 +450,28 @@ CpuAddr := R0
         sta CpuAddr+0
         jsr read_byte
         sta CpuAddr+1
+
+        ; safety: for the stub, only permit writes to $80 - $FF, or $6000+
+        ; (this might be unnecessary, but right now we need to debug it and have it not
+        ; instantly crash)
+        lda CpuAddr+1
+        cmp #$60
+        bcs safe_write ; anything $6000+ is fine
+        cmp #$00
+        bne unsafe_write ; anything below that that isn't on zeropage is rejected
+        lda CpuAddr+0
+        bpl unsafe_write ; only $80+ is permitted as a destination on zeropage
+
+safe_write:
         ; then the byte we want to write
         jsr read_byte
         ; perform the write, then we're done (no reply for this command)
         ldy #0
         sta (CpuAddr), y
-
+        rts
+unsafe_write:
+        ; read the next byte, and throw it away
+        jsr read_byte
         rts
 .endproc
 
